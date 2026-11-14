@@ -1,0 +1,8 @@
+{
+  "name": "scrl",
+  "version": "1.0.0",
+  "main": "scrl.js",
+  "scripts": {
+    "start": "node scrl.js"
+  }
+}
