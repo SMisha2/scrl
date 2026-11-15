@@ -52,9 +52,9 @@ function pageImpact(res, user) {
     recommendations.push('<div class="alert alert-danger">Есть открытые споры по договорённостям. Их должен рассмотреть ответственный взрослый, не раскрывая подробности другим участникам.</div>');
   }
 
-  const content = '<div class="row-between"><div><h1>Пульс лицея</h1><p class="muted">Реальная взаимопомощь, а не количество накопленных ScRl.</p></div>' +
+  const content = '<div class="row-between"><div><h1>Пульс лицея</h1></div>' +
     '<span class="badge badge-primary-soft">' + esc(scopeLabel) + '</span></div>' +
-    '<section class="card"><div class="row-between"><div><h2>Что меняется благодаря ScRl</h2><p class="muted small">Показатели за последние 30 дней, если не указано другое.</p></div>' +
+    '<section class="card"><div class="row-between"><div><h2>Показатели за 30 дней</h2></div>' +
     '<span class="badge badge-muted">' + metrics.studentsCount + ' учеников в области подсчёта</span></div>' +
     '<div class="grid grid-4 mt-2">' +
       metricCard('Завершённые договорённости', metrics.completedDeals30d, 'Подтверждены обеими сторонами') +
@@ -70,20 +70,20 @@ function pageImpact(res, user) {
     '<div class="grid grid-2"><section class="card"><h2>Скорость ответа</h2><div class="grid grid-2">' +
       '<div><div class="muted small">Среднее до первого отклика</div><div class="value">' + responseSpeed + '</div></div>' +
       '<div><div class="muted small">Отклик в течение суток</div><div class="value">' + withinDay + '</div></div>' +
-    '</div><p class="muted small mt-1">Считается по запросам о помощи за последние 30 дней. Запросы без отклика не входят в среднее время.</p></section>' +
+    '</div></section>' +
     '<section class="card"><h2>Что стоит улучшить</h2>' +
-      (recommendations.join('') || '<p class="muted">Срочных сигналов по текущим агрегированным данным нет. Это не доказывает отсутствие проблем. Продолжайте собирать честную обратную связь.</p>') +
+      (recommendations.join('') || '<p class="muted">Срочных сигналов нет.</p>') +
     '</section></div>' +
-    '<section class="card"><h2>Где запросов больше, чем предложений</h2><p class="muted small">Это ориентир для поиска нехватки поддержки, а не рейтинг предметов и не оценка учеников.</p>' +
+    '<section class="card"><h2>Дефицит предложений</h2>' +
     (gaps ? '<table><thead><tr><th>Категория</th><th>Запросы</th><th>Предложения</th><th>Сигнал</th></tr></thead><tbody>' + gaps + '</tbody></table>' :
       '<p class="muted mt-1">Сейчас нет категорий с перевесом запросов над предложениями.</p>') +
     '</section>' +
-    '<section class="card"><h2>Как читать эти цифры</h2><ul class="muted small" style="padding-left:20px;display:grid;gap:6px">' +
+    '<details class="card"><summary>Методика расчёта</summary><ul class="muted small" style="padding-left:20px;display:grid;gap:6px">' +
     '<li>Завершённая договорённость означает, что участники сами подтвердили выполнение внутри ScRl; это не независимая проверка качества помощи.</li>' +
     '<li>Один человек может участвовать в нескольких договорённостях, но в метрике охвата считается один раз.</li>' +
     '<li>Количество ScRl, торгов и регистраций не считается доказательством пользы для лицея.</li>' +
     '<li>Показываются только агрегированные числа, имена учеников и содержание их запросов здесь не раскрываются.</li>' +
-    '</ul></section>' +
+    '</ul></details>' +
     '<div class="row"><a class="btn btn-primary" href="' + (user.role === 'admin' ? '/admin' : '/teacher') + '">Вернуться в кабинет</a>' +
     (user.role === 'admin' ? '<a class="btn btn-ghost" href="/admin/moderation">Проверить спорные ситуации</a>' : '') + '</div>';
 
