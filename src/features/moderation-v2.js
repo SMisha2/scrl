@@ -77,7 +77,7 @@ function pageModeration(res, user, url) {
     const post = findPost(meta.postKind, meta.postId);
     const reporter = state.users.find(x => x.id === meta.reporterId);
     const author = post && state.users.find(x => x.id === post.user_id);
-    const buttons = '<form method="POST" action="/admin/moderation/report"><input type="hidden" name="report_id" value="' + esc(report.id) + '"><button type="hidden" name="decision" value="dismiss"><button class="btn btn-ghost btn-sm">Отклонить жалобу</button></form>' +
+    const buttons = '<form method="POST" action="/admin/moderation/report"><input type="hidden" name="report_id" value="' + esc(report.id) + '"><input type="hidden" name="decision" value="dismiss"><button class="btn btn-ghost btn-sm">Отклонить жалобу</button></form>' +
       '<form method="POST" action="/admin/moderation/report"><input type="hidden" name="report_id" value="' + esc(report.id) + '"><input type="hidden" name="decision" value="remove"><button class="btn btn-danger btn-sm">Скрыть публикацию</button></form>';
     return '<article class="card"><div class="row-between"><b>' + esc(post?.title || 'Публикация не найдена') + '</b><span class="badge badge-accent">Жалоба</span></div>' +
       (post ? '<p class="mt-1">' + esc(post.description) + '</p>' : '') +
