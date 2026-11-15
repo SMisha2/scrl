@@ -7,6 +7,7 @@ const { layout } = require('../views/layout');
 const { notify, unreadCount } = require('../utils/notifications');
 const { analyseSubmission } = require('../services/ai-moderation');
 const { parseDeadline, resolvePostTerms } = require('../services/board-rules');
+const { recommendHelpOffers } = require('../services/board-matching');
 
 function dealLedgerState(deal) {
   const held = state.accounts.find(item => item.user_id === deal.buyer_id && item.kind === 'held');
@@ -179,36 +180,15 @@ function renderResponseForm(post) {
 }
 
 function recommendedHelpOffers(user) {
-  const normalize = value => String(value || '').trim().toLocaleLowerCase('ru-RU').replace(/\s+/g, ' ');
-  const requests = state.demand_posts.filter(post =>
-    post.user_id === user.id && post.status === 'active' && normalize(post.category)
-  );
-  if (!requests.length) return [];
-
-  const offers = state.offer_posts.filter(post => {
-    if (post.status !== 'active' || post.user_id === user.id) return false;
-    const author = state.users.find(person => person.id === post.user_id);
-    if (!author || author.is_blocked) return false;
-    return post.price_mode === 'free' || (canTrade(user) && canTrade(author));
+  return recommendHelpOffers({
+    user,
+    demandPosts: state.demand_posts,
+    offerPosts: state.offer_posts,
+    users: state.users,
+    canTradeUser: canTrade,
+    limit: 3
   });
-
-  const matches = [];
-  const used = new Set();
-  for (const request of requests) {
-    const category = normalize(request.category);
-    for (const offer of offers) {
-      if (used.has(offer.id) || normalize(offer.category) !== category) continue;
-      const author = state.users.find(person => person.id === offer.user_id);
-      matches.push({ offer, request, author });
-      used.add(offer.id);
-    }
-  }
-  return matches.sort((a, b) =>
-    Number(a.offer.price_mode !== 'free') - Number(b.offer.price_mode !== 'free') ||
-    b.offer.created_at.localeCompare(a.offer.created_at)
-  ).slice(0, 3);
 }
-
 function pageCommunity(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
   const q = (url.searchParams.get('q') || '').trim().toLowerCase();
