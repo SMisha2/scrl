@@ -453,8 +453,8 @@ function layout(title, user, content) {
   const nav = navLinks.length
     ? `<nav class="nav" aria-label="Основная навигация">${navLinks.map(renderNavLink).join('')}</nav>`
     : '';
-  const mobilePrimary = navLinks.length > 4 ? navLinks.slice(0, 3) : navLinks;
-  const mobileSecondary = navLinks.length > 4 ? navLinks.slice(3) : [];
+  const mobilePrimary = navLinks.length > 4 ? navLinks.slice(0, 4) : navLinks;
+  const mobileSecondary = navLinks.length > 4 ? navLinks.slice(4) : [];
   const mobileNav = navLinks.length
     ? `<nav class="mobile-nav" aria-label="Мобильная навигация">
         <div class="mobile-nav-primary">${mobilePrimary.map(renderNavLink).join('')}</div>
