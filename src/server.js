@@ -78,6 +78,8 @@ const server = http.createServer(async (req, res) => {
     if (path === '/applications/decision' && method === 'POST') return community.handleApplicationDecision(res, user, params);
     if (path === '/deals' && method === 'GET') return community.pageDeals(res, user, url);
     if (path === '/deals/action' && method === 'POST') return community.handleDealAction(res, user, params);
+    if (path === '/deals/message' && method === 'POST') return community.handleDealMessage(res, user, params);
+    if (path === '/deals/review' && method === 'POST') return community.handleDealReview(res, user, params);
     if (path === '/favorites' && method === 'GET') return community.pageFavorites(res, user);
     if (path === '/favorites/toggle' && method === 'POST') return community.handleFavoriteToggle(res, user, params);
     if (path === '/notifications' && method === 'GET') return community.pageNotifications(res, user);
