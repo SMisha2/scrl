@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('node:module');
-const path = require('node:path');
 
 function loadMarketWithState(state) {
   const storePath = require.resolve('../src/store');
@@ -18,7 +17,11 @@ function loadMarketWithState(state) {
       return state.accounts.find(account => account.user_id === null && account.kind === kind) || null;
     },
     save() {
-      saves.push(JSON.stringify(state.token_rate_candles));
+      saves.push(JSON.stringify({
+        trades: state.token_market_trades,
+        candles: state.token_rate_candles,
+        price: state.settings.token_exchange_rate
+      }));
     }
   };
   require.cache[storePath] = storeStub;
@@ -36,62 +39,112 @@ function loadMarketWithState(state) {
 
 function createState() {
   return {
-    users: [
-      { id: 'student-1', role: 'student' },
-      { id: 'teacher-1', role: 'teacher' }
-    ],
+    users: [{ id: 'student-1', role: 'student' }, { id: 'teacher-1', role: 'teacher' }],
     accounts: [
-      { id: 'a1', user_id: 'student-1', kind: 'available', balance: 200 },
-      { id: 'a2', user_id: 'student-1', kind: 'held', balance: 50 },
-      { id: 'a3', user_id: 'student-1', kind: 'vrub', balance: 100 },
-      { id: 'a4', user_id: 'student-1', kind: 'vrub_held', balance: 25 },
-      { id: 'a5', user_id: null, kind: 'reserve', balance: 700 },
-      { id: 'a6', user_id: null, kind: 'burn', balance: 50 },
+      { id: 'a1', user_id: 'student-1', kind: 'available', balance: 60000 },
+      { id: 'a2', user_id: 'student-1', kind: 'held', balance: 40000 },
+      { id: 'a3', user_id: 'student-1', kind: 'vrub', balance: 3000 },
+      { id: 'a4', user_id: 'student-1', kind: 'vrub_held', balance: 1000 },
+      { id: 'a5', user_id: null, kind: 'reserve', balance: 100000 },
+      { id: 'a6', user_id: null, kind: 'burn', balance: 10000 },
       { id: 'a7', user_id: 'teacher-1', kind: 'available', balance: 9000 }
     ],
-    settings: {},
-    token_rate_candles: []
+    settings: { token_target_rate: 0.05, token_exchange_rate: 0.05, token_exchange_rate_version: 1 },
+    token_rate_candles: [],
+    token_market_trades: []
   };
 }
 
-test('calculates internal rate from all V-RUB and total ScRl issuance', () => {
+test('4,000 V-RUB at a 0.05 target supports at most 80,000 circulating ScRl', () => {
   const state = createState();
   const { market } = loadMarketWithState(state);
   const stats = market.getTokenMarketStats();
-  assert.equal(stats.circulatingScRl, 250);
-  assert.equal(stats.virtualRubleSupply, 125);
-  assert.equal(stats.reserveScRl, 700);
-  assert.equal(stats.burnedScRl, 50);
-  assert.equal(stats.totalIssuedScRl, 1000);
-  assert.equal(stats.referenceRate, 0.125);
-  assert.equal(stats.realRubAvailable, 0);
+  assert.equal(stats.virtualRubleSupply, 4000);
+  assert.equal(stats.circulatingScRl, 109000);
+  assert.equal(stats.maxSupportedScRl, 80000);
+  assert.equal(stats.excessScRl, 29000);
+  assert.equal(stats.remainingCapacityScRl, 0);
+  assert.equal(stats.coverageRatio, Number((4000 / (109000 * 0.05)).toFixed(6)));
+  assert.equal(stats.backedRate, Number((4000 / 109000).toFixed(6)));
+  assert.equal(stats.marketPrice, 0.05);
+  // System reserve and already-burned tokens do not count as circulation.
+  assert.equal(stats.reserveScRl, 100000);
+  assert.equal(stats.burnedScRl, 10000);
+  assert.equal(stats.totalSupplyScRl, 209000);
 });
 
-test('records hourly OHLC candles and updates the reference rate', () => {
+test('dynamic burn fee rises when supply exceeds its V-RUB-backed limit', () => {
+  const state = createState();
+  const { market } = loadMarketWithState(state);
+  const stats = market.getTokenMarketStats();
+  assert.equal(stats.burnFeeRate, market.getBurnFeeRate(stats.coverageRatio));
+  assert.ok(stats.burnFeeRate > 0.05);
+  assert.equal(market.calculateBurnCommission(1000, stats), Math.floor(1000 * stats.burnFeeRate));
+  assert.equal(market.calculateBurnCommission(1, stats), 0);
+});
+
+test('burn fee falls to zero when supply has at least twice the target coverage', () => {
+  const state = createState();
+  state.accounts.find(account => account.kind === 'available').balance = 1000;
+  state.accounts.find(account => account.kind === 'held').balance = 0;
+  state.accounts.find(account => account.kind === 'a7').balance = 0;
+  const { market } = loadMarketWithState(state);
+  const stats = market.getTokenMarketStats();
+  assert.equal(stats.coverageRatio, 2);
+  assert.equal(stats.burnFeeRate, 0);
+  assert.equal(market.calculateBurnCommission(1000, stats), 0);
+});
+
+test('new ScRl issuance is blocked when it exceeds the backed capacity', () => {
+  const state = createState();
+  state.accounts.find(account => account.kind === 'available').balance = 30000;
+  state.accounts.find(account => account.kind === 'held').balance = 0;
+  state.accounts.find(account => account.id === 'a7').balance = 0;
+  const { market } = loadMarketWithState(state);
+  assert.equal(market.canIssueScRl(10000).allowed, true);
+  assert.equal(market.canIssueScRl(50000).allowed, false);
+});
+
+test('executed trades move the market price using seven-day volume-weighted price', () => {
   const state = createState();
   const { market, saves } = loadMarketWithState(state);
   const start = new Date('2026-11-15T12:00:00.000Z');
-  const first = market.recordTokenRateCandle(start);
-  assert.equal(first.candles.length, 1);
-  assert.equal(first.candles[0].open, 0.125);
+  const first = market.recordTokenMarketTrade({
+    orderId: 'order-1', side: 'sell_scrl',
+    amountScRl: 100, amountVrub: 10, feeScRl: 1,
+    buyerId: 'student-1', sellerId: 'teacher-1', createdAt: start
+  });
+  assert.equal(first.marketPrice, 0.1);
+  assert.equal(first.marketTradeCount, 1);
 
-  state.accounts.find(account => account.kind === 'vrub').balance = 200;
-  const second = market.recordTokenRateCandle(new Date(start.getTime() + 15 * 60 * 1000));
+  const second = market.recordTokenMarketTrade({
+    orderId: 'order-2', side: 'sell_vrub',
+    amountScRl: 1000, amountVrub: 25, feeScRl: 5,
+    buyerId: 'teacher-1', sellerId: 'student-1',
+    createdAt: new Date(start.getTime() + 15 * 60 * 1000)
+  });
+  assert.equal(second.marketTradeCount, 2);
+  assert.equal(second.marketVolumeScRl, 1100);
+  assert.equal(second.marketVolumeVrub, 35);
+  assert.equal(second.marketPrice, Number((35 / 1100).toFixed(6)));
   const candle = second.candles[0];
-  assert.equal(candle.open, 0.125);
-  assert.equal(candle.high, 0.225);
-  assert.equal(candle.low, 0.125);
-  assert.equal(candle.close, 0.225);
-  assert.equal(candle.samples, 2);
-  assert.equal(state.settings.token_exchange_rate, 0.225);
-  assert.ok(saves.length >= 2);
+  assert.equal(candle.open, 0.1);
+  assert.equal(candle.high, 0.1);
+  assert.equal(candle.close, second.marketPrice);
+  assert.ok(candle.low < 0.1);
+  assert.equal(candle.volume_scrl, 1100);
+  assert.equal(saves.length, 2);
 });
 
-test('ignores non-student account balances in the internal exchange rate', () => {
+test('an order cannot create two market trades', () => {
   const state = createState();
   const { market } = loadMarketWithState(state);
-  const before = market.getTokenMarketStats().referenceRate;
-  state.accounts.find(account => account.user_id === 'teacher-1').balance += 1000000;
-  const after = market.getTokenMarketStats().referenceRate;
-  assert.equal(after, before);
+  const trade = {
+    orderId: 'same-order', side: 'sell_scrl',
+    amountScRl: 100, amountVrub: 10, feeScRl: 0
+  };
+  market.recordTokenMarketTrade(trade);
+  const second = market.recordTokenMarketTrade(trade);
+  assert.equal(state.token_market_trades.length, 1);
+  assert.equal(second.marketTradeCount, 1);
 });
