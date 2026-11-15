@@ -39,7 +39,7 @@ h1{margin-bottom:5px;font-size:30px;line-height:1.2;font-weight:650;letter-spaci
 h2{margin-bottom:8px;font-size:17px;line-height:1.3;font-weight:650;letter-spacing:-.02em}
 h3{margin-bottom:6px;font-size:15px;line-height:1.35;font-weight:650}
 p{margin-bottom:0}
-.card{margin-bottom:20px;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none}
+.card{margin-bottom:22px;padding:16px 0;background:transparent;border:0;border-bottom:1px solid var(--border);border-radius:0;box-shadow:none}
 .card.balance{background:transparent;border:0}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:7px 12px;border:1px solid var(--border);border-radius:3px;font-size:13px;font-weight:550;cursor:pointer;text-decoration:none!important;transition:background .12s ease,border-color .12s ease,color .12s ease;font-family:inherit}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -252,7 +252,7 @@ function layout(title, user, content) {
 <script>(function(){try{var t=localStorage.getItem('scrl-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 <title>${esc(title)} — ScRl</title><style>${CSS}</style></head>
 <body><header class="header"><div class="container header-inner">
-<a href="/" class="logo"><span class="coin">S</span>ScRl</a>${nav}${right}
+<a href="/" class="logo">ScRl</a>${nav}${right}
 </div></header><main class="container">${content}</main>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
 }
 
