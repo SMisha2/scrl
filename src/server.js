@@ -135,12 +135,13 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`\n  ScRl → http://localhost:${PORT}\n`);
-  console.log('  Демо-вход (пароль password123):');
-  console.log('    ivan@scrl.demo     — ученик');
-  console.log('    masha@scrl.demo    — ученик');
-  console.log('    petya@scrl.demo    — ученик 12 лет (торговля заблокирована)');
-  console.log('    teacher@scrl.demo  — учитель');
-  console.log('    admin@scrl.demo    — администратор\n');
+  if (process.env.SCRL_DEMO_MODE === 'true') {
+    console.log('  Демо-режим включён. Используйте его только локально, не на публичном сайте.');
+    console.log('  Демо-пароль: password123');
+    console.log('  Доступные демо-учётные записи перечислены в README.md.\n');
+  } else {
+    console.log('  Демо-учётные записи отключены.');
+  }
   console.log(`  Данные: ${DATA_FILE}\n`);
 });
 
