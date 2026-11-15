@@ -305,7 +305,13 @@ body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 .container{width:100%;max-width:none;margin-left:auto;margin-right:auto;padding-left:clamp(20px,3vw,58px);padding-right:clamp(20px,3vw,58px)}
 .header-inner{min-height:66px;gap:10px 22px;padding-top:8px;padding-bottom:8px;flex-wrap:wrap}
 .nav{flex:1 1 560px;flex-wrap:wrap;overflow:visible;gap:2px clamp(10px,1.25vw,20px)}
-.nav a{min-height:40px}
+.nav a{position:relative;display:inline-flex;align-items:center;min-height:40px;padding:0 10px;border:1px solid transparent;border-radius:5px;color:var(--muted);transition:color .16s ease,background .16s ease,border-color .16s ease,transform .16s ease}
+.nav a:hover,.nav a:focus-visible{color:var(--text);background:var(--surface-soft);border-color:var(--border);text-decoration:none;transform:translateY(-1px)}
+.nav a:active{transform:translateY(0)}
+.nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nav a.nav-exchange{color:var(--accent-button-text);background:var(--accent-button);border-color:var(--accent-button);font-weight:700;padding-left:14px;padding-right:14px}
+.nav a.nav-exchange:hover,.nav a.nav-exchange:focus-visible{color:var(--accent-button-text);background:var(--accent-button-hover);border-color:var(--accent-button-hover);box-shadow:0 2px 9px rgba(49,97,75,.14)}
+.nav a.nav-exchange:after{content:"";width:6px;height:6px;margin-left:8px;border-radius:50%;background:currentColor;opacity:.7}
 .header-right{margin-left:auto}
 main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-height:calc(100dvh - 145px);padding-top:clamp(28px,3vw,46px);padding-bottom:clamp(48px,5vw,76px)}
 .site-footer{flex:0 0 auto;padding-top:14px;padding-bottom:22px;border-top:1px solid var(--border);color:var(--muted);font-size:11px}
@@ -384,6 +390,9 @@ main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-heigh
   .mobile-nav-primary{display:flex;flex:1 1 auto;align-items:stretch;min-width:0;gap:3px}
   .mobile-nav-primary>a,.mobile-more>summary{display:flex;align-items:center;justify-content:center;flex:1 1 0;min-width:0;min-height:48px;padding:6px 3px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.2;text-align:center;white-space:normal;overflow-wrap:anywhere;text-decoration:none!important;cursor:pointer}
   .mobile-nav-primary>a:hover,.mobile-more>summary:hover{color:var(--text)}
+  .mobile-nav-primary>a.nav-exchange{color:var(--accent-button-text);background:var(--accent-button);border:1px solid var(--accent-button);font-weight:750}
+  .mobile-nav-primary>a.nav-exchange:after{content:"";width:5px;height:5px;margin-left:4px;border-radius:50%;background:currentColor}
+  .mobile-nav-primary>a:active{background:var(--surface-soft);border-color:var(--border)}
   .mobile-more{display:block;position:relative;flex:0 0 54px;min-width:54px}
   .mobile-more>summary{width:100%;list-style:none;color:var(--accent)}
   .mobile-more>summary::-webkit-details-marker{display:none}
@@ -441,15 +450,14 @@ function layout(title, user, content) {
     admin: [
       { href: '/admin', label: 'Монитор' },
       { href: '/admin/users', label: 'Пользователи' },
-      { href: '/admin/impact', label: 'Пульс лицея' },
-      { href: '/admin/market', label: 'Курс ScRl' },
+      { href: '/admin/market', label: 'Биржа ScRl', className: 'nav-exchange' },
       { href: '/auctions', label: 'Аукционы' },
       { href: '/admin/moderation', label: 'Модерация' },
       { href: '/admin/ai', label: 'AI-помощник' },
       { href: '/admin/financial', label: 'Финансы' }
     ]
   }[user.role] || []);
-  const renderNavLink = item => `<a href="${item.href}">${item.label}</a>`;
+  const renderNavLink = item => `<a href="${item.href}"${item.className ? ` class="${item.className}"` : ''}>${item.label}</a>`;
   const nav = navLinks.length
     ? `<nav class="nav" aria-label="Основная навигация">${navLinks.map(renderNavLink).join('')}</nav>`
     : '';
