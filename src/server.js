@@ -120,7 +120,7 @@ const server = http.createServer(async (req, res) => {
     if (path === '/admin/ai' && method === 'GET') return moderation.pageAiChat(res, user, url);
     if (path === '/admin/ai/chat' && method === 'POST') return moderation.handleAiChat(res, user, params);
     if (path === '/admin/moderation' && method === 'GET') return moderation.pageModeration(res, user, url);
-    if (path === '/admin/moderation/scan' && method === 'POST') return moderation.handleModerationScan(res, user);
+    if (path === '/admin/moderation/scan' && method === 'POST') return await moderation.handleModerationScan(res, user);
     if (path === '/admin/moderation/action' && method === 'POST') return moderation.handleModerationAction(res, user, params);
     if (path === '/admin/moderation/report' && method === 'POST') return moderation.handleReportAction(res, user, params);
     if ((path === '/admin/financial' || path === '/admin/finance') && method === 'GET') return finance.pageFinancialOps(res, user, url);
