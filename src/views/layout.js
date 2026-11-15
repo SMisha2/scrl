@@ -401,7 +401,8 @@ main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-heigh
   .mobile-more{display:block;position:relative;flex:0 0 54px;min-width:54px}
   .mobile-more>summary{width:100%;list-style:none;color:var(--accent)}
   .mobile-more>summary::-webkit-details-marker{display:none}
-  .mobile-more>summary.has-active{color:var(--accent-hover);background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;font-weight:800}
+  .mobile-more.has-active{flex:0 0 auto;min-width:84px;max-width:124px}
+  .mobile-more>summary.has-active{color:var(--accent-hover);background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;font-weight:800;padding-left:6px;padding-right:6px}
   .mobile-more>summary.has-active:after{content:"⌄";margin-left:3px}
   .mobile-more-panel{position:absolute;right:0;bottom:calc(100% + 9px);display:grid;gap:0;width:min(300px,calc(100vw - 24px));max-height:min(65dvh,520px);overflow:auto;padding:6px 12px;background:var(--surface);border:1px solid var(--border);overscroll-behavior:contain}
   .mobile-more-panel a{display:flex;align-items:center;min-height:48px;padding:10px 4px;border-bottom:1px solid var(--border);color:var(--text);font-size:14px;font-weight:550;text-decoration:none}
@@ -470,6 +471,7 @@ function activeNavScript() {
     if (more) {
       var summary = more.querySelector('summary');
       if (summary) {
+        more.classList.add('has-active');
         summary.classList.add('has-active');
         summary.textContent = item.link.textContent.trim();
         summary.setAttribute('aria-label', 'Текущий раздел: ' + item.link.textContent.trim() + '. Открыть остальные разделы');
