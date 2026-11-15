@@ -20,7 +20,7 @@ test('teacher can be returned to the student role without losing their class', (
 test('teacher assignment requires a valid class value', () => {
   const user = { id: 'u3', role: 'student', class_name: '8А' };
   assert.throws(() => changeUserRole(user, 'teacher', ''), { code: 'teacher_class' });
-  assert.throws(() => changeUserRole(user, 'teacher', '8А\\nadmin'), { code: 'teacher_class' });
+  assert.throws(() => changeUserRole(user, 'teacher', '8А\nadmin'), { code: 'teacher_class' });
 });
 
 test('admin and already removed accounts cannot be changed by the ordinary role action', () => {
