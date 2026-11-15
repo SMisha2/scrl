@@ -6,7 +6,10 @@ function seedData() {
   const now = new Date().toISOString();
   const s = {
     users: [], accounts: [], transactions: [], entries: [],
-    listings: [], orders: [], auctions: [], bids: [], exchange_orders: []
+    listings: [], orders: [], auctions: [], bids: [], exchange_orders: [],
+    demands: [], offers: [], applications: [], deals: [], notifications: [],
+    favorites: [], reports: [], moderation_cases: [], ai_messages: [],
+    money_operations: [], audit_logs: []
   };
   const reserveId = crypto.randomUUID();
   const burnId = crypto.randomUUID();
@@ -78,6 +81,21 @@ if (fs.existsSync(DATA_FILE)) {
 function save() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
 }
+
+// Backward-compatible schema extension for existing scrl-data.json files.
+const COLLECTIONS = [
+  'demands', 'offers', 'applications', 'deals', 'notifications',
+  'favorites', 'reports', 'moderation_cases', 'ai_messages',
+  'money_operations', 'audit_logs'
+];
+let migrated = false;
+for (const name of COLLECTIONS) {
+  if (!Array.isArray(state[name])) {
+    state[name] = [];
+    migrated = true;
+  }
+}
+if (migrated) save();
 
 
 
