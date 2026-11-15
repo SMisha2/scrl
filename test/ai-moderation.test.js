@@ -16,7 +16,7 @@ function withGigaChatEnv(run) {
   const previousModel = process.env.SCRL_GIGACHAT_MODEL;
   const originalFetch = global.fetch;
   process.env.SCRL_AI_MODERATION_ENABLED = 'true';
-  process.env.SCRL_GIGACHAT_AUTH_KEY = 'test-gigachat-auth-key';
+  process.env.SCRL_GIGACHAT_AUTH_KEY = 'test-gigachat-auth-key-' + Date.now() + '-' + Math.random().toString(36).slice(2);
   delete process.env.SCRL_GIGACHAT_MODEL;
   return Promise.resolve()
     .then(run)
@@ -116,9 +116,17 @@ test('routes a model review verdict to the human moderation queue', () => {
 test('uses GigaChat OAuth and the chat completion API for safe submissions', async () => {
   await withGigaChatEnv(async () => {
     const calls = [];
+    process.env.SCRL_GIGACHAT_MODEL = 'GigaChat';
     global.fetch = async (url, options) => {
       calls.push({ url, options });
       if (String(url).includes('/api/v2/oauth')) return oauthResponse();
+      if (String(url).endsWith('/v1/models')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ id: 'GigaChat-2' }, { id: 'GigaChat-2-Pro' }] })
+        };
+      }
       return {
         ok: true,
         status: 200,
@@ -130,18 +138,21 @@ test('uses GigaChat OAuth and the chat completion API for safe submissions', asy
 
     const config = getApiConfig();
     assert.equal(config.model, 'GigaChat');
+    assert.equal(config.modelsEndpoint, 'https://api.giga.chat/v1/models');
     assert.equal(config.provider, 'gigachat');
 
     const result = await analyseSubmission('Помогу разобраться с Python на примерах');
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(calls[0].url, 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth');
-    assert.equal(calls[0].options.headers.Authorization, 'Basic test-gigachat-auth-key');
+    assert.match(calls[0].options.headers.Authorization, /^Basic test-gigachat-auth-key-/);
     assert.equal(calls[0].options.headers.RqUID.length, 36);
     assert.equal(calls[0].options.body, 'scope=GIGACHAT_API_PERS');
-    assert.equal(calls[1].url, 'https://api.giga.chat/v1/chat/completions');
+    assert.equal(calls[1].url, 'https://api.giga.chat/v1/models');
     assert.equal(calls[1].options.headers.Authorization, 'Bearer test-access-token');
-    const body = JSON.parse(calls[1].options.body);
-    assert.equal(body.model, 'GigaChat');
+    assert.equal(calls[2].url, 'https://api.giga.chat/v1/chat/completions');
+    assert.equal(calls[2].options.headers.Authorization, 'Bearer test-access-token');
+    const body = JSON.parse(calls[2].options.body);
+    assert.equal(body.model, 'GigaChat-2-Pro');
     assert.equal(body.temperature, 0);
     assert.equal(result.decision, 'keep');
     assert.equal(Object.prototype.hasOwnProperty.call(result, 'model'), false);
@@ -157,6 +168,9 @@ test('retries OAuth once after an expired access token', async () => {
       if (String(url).includes('/api/v2/oauth')) {
         oauthCalls += 1;
         return oauthResponse();
+      }
+      if (String(url).endsWith('/v1/models')) {
+        return { ok: true, status: 200, json: async () => ({ data: [{ id: 'GigaChat-2' }] }) };
       }
       chatCalls += 1;
       if (chatCalls === 1) return { ok: false, status: 401 };
@@ -179,6 +193,9 @@ test('fails closed to manual review when GigaChat is unavailable', async () => {
   await withGigaChatEnv(async () => {
     global.fetch = async url => {
       if (String(url).includes('/api/v2/oauth')) return oauthResponse();
+      if (String(url).endsWith('/v1/models')) {
+        return { ok: true, status: 200, json: async () => ({ data: [{ id: 'GigaChat-2' }] }) };
+      }
       return { ok: false, status: 503 };
     };
     const result = await analyseSubmission('Безопасное описание учебной помощи');
