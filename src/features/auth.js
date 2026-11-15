@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { SESSION_MAX_AGE } = require('../config');
 const { state, account, systemAccount, save, recordTx } = require('../store');
 const { hashPassword, verifyPassword } = require('../security');
 const { sessions, parseCookies, sessionRecord, ageStatus } = require('../session');
@@ -54,7 +55,7 @@ function doLogin(req, res, params) {
   const location = user.role === 'admin' ? '/admin' : user.role === 'teacher' ? '/teacher' : '/app';
   res.writeHead(302, {
     Location: location,
-    'Set-Cookie': sessionCookie(req, token, 7 * 24 * 3600),
+    'Set-Cookie': sessionCookie(req, token, SESSION_MAX_AGE),
     'Cache-Control': 'no-store'
   });
   res.end();
