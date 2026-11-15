@@ -79,7 +79,14 @@ if (fs.existsSync(DATA_FILE)) {
 
 
 function save() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
+  const temporaryFile = DATA_FILE + '.' + process.pid + '.' + crypto.randomUUID() + '.tmp';
+  try {
+    fs.writeFileSync(temporaryFile, JSON.stringify(state, null, 2), { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(temporaryFile, DATA_FILE);
+  } catch (error) {
+    try { if (fs.existsSync(temporaryFile)) fs.unlinkSync(temporaryFile); } catch {}
+    throw error;
+  }
 }
 
 // Backward-compatible schema extension for existing scrl-data.json files.
@@ -424,25 +431,60 @@ function rebuildTokenLedgerFromHistory() {
 }
 
 function recordTx(kind, initiator, payload, entries) {
+  if (!Array.isArray(entries) || entries.length < 2) throw new Error('A transaction needs at least two ledger entries');
+
+  const resolved = entries.map(entry => {
+    const acc = state.accounts.find(item => item.id === entry.accountId);
+    const amount = Number(entry.amount);
+    if (!acc) throw new Error('Account not found');
+    if (!Number.isSafeInteger(amount) || amount === 0) throw new Error('Invalid transaction amount');
+    return { entry, account: acc, amount };
+  });
+
+  const projected = new Map();
+  for (const item of resolved) {
+    projected.set(item.account.id, (projected.get(item.account.id) ?? item.account.balance) + item.amount);
+  }
+  for (const nextBalance of projected.values()) {
+    if (!Number.isSafeInteger(nextBalance) || nextBalance < 0) throw new Error('Insufficient funds or invalid balance');
+  }
+  const totalDelta = resolved.reduce((sum, item) => sum + item.amount, 0);
+  if (totalDelta !== 0) throw new Error('Unbalanced transaction');
+
+  const snapshot = {
+    accounts: JSON.stringify(state.accounts),
+    transactions: JSON.stringify(state.transactions),
+    entries: JSON.stringify(state.entries),
+    token_lots: JSON.stringify(state.token_lots),
+    token_ledger_entries: JSON.stringify(state.token_ledger_entries),
+    funding_sources: JSON.stringify(state.funding_sources)
+  };
+
   const txId = crypto.randomUUID();
   const now = new Date().toISOString();
-  for (const e of entries) {
-    const acc = state.accounts.find(a => a.id === e.accountId);
-    if (!acc) throw new Error('Account not found');
-    if (acc.balance + e.amount < 0) throw new Error('Insufficient funds');
+  try {
+    state.transactions.push({ id: txId, kind, initiator_id: initiator, payload, created_at: now });
+    for (const item of resolved) {
+      item.account.balance += item.amount;
+      state.entries.push({
+        id: crypto.randomUUID(), tx_id: txId, account_id: item.account.id,
+        amount: item.amount, note: item.entry.note || null, created_at: now
+      });
+    }
+    applyTokenLedger(txId, kind, resolved.map(item => ({
+      accountId: item.account.id, amount: item.amount, note: item.entry.note
+    })), now, initiator);
+    save();
+    return txId;
+  } catch (error) {
+    state.accounts = JSON.parse(snapshot.accounts);
+    state.transactions = JSON.parse(snapshot.transactions);
+    state.entries = JSON.parse(snapshot.entries);
+    state.token_lots = JSON.parse(snapshot.token_lots);
+    state.token_ledger_entries = JSON.parse(snapshot.token_ledger_entries);
+    state.funding_sources = JSON.parse(snapshot.funding_sources);
+    throw error;
   }
-  state.transactions.push({ id: txId, kind, initiator_id: initiator, payload, created_at: now });
-  for (const e of entries) {
-    const acc = state.accounts.find(a => a.id === e.accountId);
-    acc.balance += e.amount;
-    state.entries.push({
-      id: crypto.randomUUID(), tx_id: txId, account_id: e.accountId,
-      amount: e.amount, note: e.note || null, created_at: now
-    });
-  }
-  applyTokenLedger(txId, kind, entries, now, initiator);
-  save();
-  return txId;
 }
 
 rebuildTokenLedgerFromHistory();
