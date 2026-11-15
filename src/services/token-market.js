@@ -40,11 +40,12 @@ function calculateMarketPrice(trades, fallbackRate) {
     return {
       price: fallbackRate,
       vwapPrice: fallbackRate,
+      lastTradePrice: null,
       volumeScRl: 0,
       volumeVrub: 0,
       tradeCount: 0,
       lastTradeAt: null,
-      source: 'live_balance_ratio'
+      source: 'target_rate'
     };
   }
 
@@ -55,15 +56,15 @@ function calculateMarketPrice(trades, fallbackRate) {
   const vwapPrice = volumeScRl > 0 ? volumeVrub / volumeScRl : fallbackRate;
 
   return {
-    // The current market price follows the latest completed exchange immediately.
-    // The seven-day VWAP remains visible as a separate historical indicator.
-    price: latestPrice,
+    // The market reference uses the seven-day VWAP. The latest trade remains separate.
+    price: vwapPrice,
     vwapPrice,
+    lastTradePrice: latestPrice,
     volumeScRl,
     volumeVrub,
     tradeCount: validTrades.length,
     lastTradeAt: latest.created_at || null,
-    source: 'last_executed_trade'
+    source: 'seven_day_vwap'
   };
 }
 
@@ -71,10 +72,10 @@ function getBurnFeeRate(coverageRatio) {
   const coverage = Math.max(0, safeNumber(coverageRatio, 0));
   if (coverage < 1) {
     const deficit = 1 - coverage;
-    return Math.min(MAX_BURN_FEE, BASE_BURN_FEE + deficit * 0.20);
+    return Number(Math.min(MAX_BURN_FEE, BASE_BURN_FEE + deficit * 0.20).toFixed(6));
   }
   // When the supply is fully covered, the fee gradually falls to zero.
-  return Math.max(0, BASE_BURN_FEE - Math.max(0, coverage - 1) * BASE_BURN_FEE);
+  return Number(Math.max(0, BASE_BURN_FEE - Math.max(0, coverage - 1) * BASE_BURN_FEE).toFixed(6));
 }
 
 function getTokenMarketStats(now = new Date()) {
@@ -108,7 +109,7 @@ function getTokenMarketStats(now = new Date()) {
   const remainingCapacityScRl = Math.max(0, maxSupportedScRl - circulatingScRl);
 
   const trades = getRecentTrades(safeNow);
-  const market = calculateMarketPrice(trades, backedRate);
+  const market = calculateMarketPrice(trades, targetRate);
   const burnFeeRate = getBurnFeeRate(coverageRatio);
 
   return {
@@ -127,7 +128,7 @@ function getTokenMarketStats(now = new Date()) {
     // referenceRate is the live ratio of all student-held V-RUB to circulating ScRl.
     // marketPrice is the latest executed trade; these are intentionally separate.
     marketPrice: Number(market.price.toFixed(6)),
-    lastTradePrice: Number(market.price.toFixed(6)),
+    lastTradePrice: market.lastTradePrice === null ? null : Number(market.lastTradePrice.toFixed(6)),
     vwapPrice: Number(market.vwapPrice.toFixed(6)),
     referenceRate: Number(backedRate.toFixed(6)),
     marketPriceSource: market.source,
@@ -294,7 +295,7 @@ function recordTokenMarketTrade(data) {
 
   return {
     ...stats,
-    candles: state.token_rate_candles.filter(item => item.model === 'market_vwap_v1').slice(-MAX_CANDLES)
+    candles: state.token_rate_candles.filter(item => item.model === 'market_spot_v2').slice(-MAX_CANDLES)
   };
 }
 
