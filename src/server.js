@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { PORT } = require('./config');
+const { PORT, DATA_FILE } = require('./config');
 const { sessions, getSessionUser } = require('./session');
 const { readBody, sendHtml, redirect, esc } = require('./utils/http');
 const { layout } = require('./views/layout');
