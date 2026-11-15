@@ -65,6 +65,7 @@ const server = http.createServer(async (req, res) => {
     if (path === '/market/create' && method === 'POST') return handleCreateListing(res, user, params);
     if (path === '/market/delete' && method === 'POST') return handleDeleteListing(res, user, params);
     if (path === '/market/buy' && method === 'POST') return handleBuyListing(res, user, params);
+    if (path === '/market/report' && method === 'POST') return social.handleReportListing(res, user, params);
     if (path === '/orders' && method === 'GET') return pageOrders(res, user, url);
     if (path === '/orders/deliver' && method === 'POST') return handleDeliver(res, user, params);
     if (path === '/orders/confirm' && method === 'POST') return handleConfirm(res, user, params);
