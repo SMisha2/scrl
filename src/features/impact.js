@@ -40,16 +40,16 @@ function pageImpact(res, user) {
   const recommendations = [];
   if (metrics.unansweredRequests > 0) {
     recommendations.push('<div class="alert alert-info">Есть <b>' + metrics.unansweredRequests +
-      '</b> активных запросов без ожидающего отклика. Стоит обратить внимание на них и проверить, не нужна ли ученикам дополнительная поддержка.</div>');
+      '</b> запросов без отклика.</div>');
   }
   if (metrics.categoryGaps.some(item => item.offers === 0)) {
-    recommendations.push('<div class="alert alert-info">В некоторых категориях есть запросы, но нет активных предложений. Можно пригласить добровольцев, которые готовы делиться знаниями по этим темам.</div>');
+    recommendations.push('<div class="alert alert-info">В некоторых категориях нет предложений помощи.</div>');
   }
   if (!metrics.requestsCreated30d && !metrics.activeOffers) {
-    recommendations.push('<div class="alert alert-info">Пока недостаточно активности для выводов. Не создавайте фиктивные публикации ради статистики. Ориентируйтесь только на настоящие запросы и предложения.</div>');
+    recommendations.push('<div class="alert alert-info">Пока недостаточно данных для выводов.</div>');
   }
   if (metrics.openDisputes > 0) {
-    recommendations.push('<div class="alert alert-danger">Есть открытые споры по договорённостям. Их должен рассмотреть ответственный взрослый, не раскрывая подробности другим участникам.</div>');
+    recommendations.push('<div class="alert alert-danger">Открытые споры требуют проверки.</div>');
   }
 
   const content = '<div class="row-between"><div><h1>Пульс лицея</h1></div>' +
