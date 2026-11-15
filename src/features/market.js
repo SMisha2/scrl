@@ -126,7 +126,7 @@ function handleBuyListing(res, user, params) {
   if (!listing) return redirect(res, '/market?error=notfound');
   if (listing.seller_id === user.id) return redirect(res, '/market?error=own');
   const seller = state.users.find(item => item.id === listing.seller_id);
-  if (!seller || !canTrade(seller)) return redirect(res, '/market?error=age');
+  if (!seller || seller.is_blocked || !canTrade(seller)) return redirect(res, '/market?error=age');
   if (!Number.isSafeInteger(listing.price) || listing.price < 1 ||
       balance(user.id, 'available') < listing.price) return redirect(res, '/market?error=insufficient');
 
