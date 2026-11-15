@@ -22,7 +22,18 @@ function pageMarket(res, user, url) {
       <p class="mt-1">${esc(l.description)}</p>
       <div class="row-between mt-1"><b class="accent">🪙 ${l.price}</b>
         ${tradeable ? `<form method="POST" action="/market/buy"><input type="hidden" name="listing_id" value="${l.id}"><button class="btn btn-accent btn-sm">Купить</button></form>` : `<span class="muted small">14+</span>`}
-      </div></div>`;
+      </div>
+      <details class="mt-1"><summary class="small muted" style="cursor:pointer">Пожаловаться на объявление</summary>
+        <form method="POST" action="/market/report" class="mt-1">
+          <input type="hidden" name="listing_id" value="${l.id}">
+          <label>Причина</label><select name="reason_code" required>
+            <option value="unsafe">Опасный товар или услуга</option><option value="privacy">Личные данные</option>
+            <option value="harassment">Оскорбления или угрозы</option><option value="spam">Спам или обман</option><option value="other">Другое</option>
+          </select>
+          <label>Подробности (необязательно)</label><textarea name="details" rows="2" maxlength="300"></textarea>
+          <button class="btn btn-ghost btn-sm">Отправить жалобу</button>
+        </form>
+      </details></div>`;
   }).join('');
 
   const mine = myListings.map(l => `<div class="card">
