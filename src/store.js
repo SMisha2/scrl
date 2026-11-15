@@ -8,7 +8,7 @@ function seedData() {
     users: [], accounts: [], transactions: [], entries: [],
     listings: [], orders: [], auctions: [], bids: [], exchange_orders: [],
     demands: [], offers: [], applications: [], deals: [], notifications: [],
-    favorites: [], reports: [], moderation_cases: [], ai_messages: [],
+    favorites: [], reports: [], moderation_cases: [], ai_messages: [], deal_messages: [], reviews: [],
     money_operations: [], audit_logs: []
   };
   const reserveId = crypto.randomUUID();
@@ -85,7 +85,7 @@ function save() {
 // Backward-compatible schema extension for existing scrl-data.json files.
 const COLLECTIONS = [
   'demands', 'offers', 'applications', 'deals', 'notifications',
-  'favorites', 'reports', 'moderation_cases', 'ai_messages',
+  'favorites', 'reports', 'moderation_cases', 'ai_messages', 'deal_messages', 'reviews',
   'money_operations', 'audit_logs'
 ];
 let migrated = false;
