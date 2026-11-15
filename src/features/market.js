@@ -4,12 +4,13 @@ const { canTrade } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
+const { analyseText } = require('../services/moderation-rules');
 function pageMarket(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const tradeable = canTrade(user);
   const othersListings = state.listings.filter(l => l.status === 'active' && l.seller_id !== user.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const myListings = state.listings.filter(l => l.seller_id === user.id && l.status === 'active')
+  const myListings = state.listings.filter(l => l.seller_id === user.id && ['active', 'pending'].includes(l.status))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const items = othersListings.map(l => {
@@ -52,23 +53,36 @@ function pageMarket(res, user, url) {
 
 function handleCreateListing(res, user, params) {
   if (user.role !== 'student' || !canTrade(user)) return redirect(res, '/market?error=age');
-  const title = (params.get('title') || '').trim();
-  const category = params.get('category') || 'Другое';
-  const description = (params.get('description') || '').trim();
-  const price = parseInt(params.get('price') || '0', 10);
-  if (!title || !description || !price || price < 1) return redirect(res, '/market?error=fields');
-  state.listings.push({
+  const title = (params.get('title') || '').trim().slice(0, 80);
+  const category = (params.get('category') || 'Другое').trim().slice(0, 40);
+  const description = (params.get('description') || '').trim().slice(0, 600);
+  const price = Number(params.get('price') || 0);
+  if (!title || !description || !category || !Number.isSafeInteger(price) || price < 1 || price > 1000000) {
+    return redirect(res, '/market?error=fields');
+  }
+  const moderation = analyseText(title + '\n' + description + '\n' + category);
+  const listing = {
     id: crypto.randomUUID(), seller_id: user.id, title, category, description, price,
-    status: 'active', created_at: new Date().toISOString()
-  });
+    status: moderation.requiresReview ? 'pending' : 'active',
+    moderation_level: moderation.level, moderation_findings: moderation.findings,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  };
+  state.listings.unshift(listing);
+  if (moderation.requiresReview) {
+    state.moderation_cases.unshift({
+      id: crypto.randomUUID(), kind: 'listing', target_id: listing.id,
+      status: 'open', reason: moderation.findings.map(item => item.label).join('; '),
+      recommendation: moderation.recommendation, created_at: new Date().toISOString()
+    });
+  }
   save();
-  redirect(res, '/market?msg=created');
+  return redirect(res, moderation.requiresReview ? '/market?msg=pending_review' : '/market?msg=created');
 }
 
 
 function handleDeleteListing(res, user, params) {
   const listing = state.listings.find(l => l.id === params.get('listing_id'));
-  if (!listing || listing.seller_id !== user.id || listing.status !== 'active') return redirect(res, '/market?error=bad');
+  if (!listing || listing.seller_id !== user.id || !['active', 'pending'].includes(listing.status)) return redirect(res, '/market?error=bad');
   listing.status = 'removed';
   save();
   redirect(res, '/market?msg=deleted');
@@ -81,7 +95,9 @@ function handleBuyListing(res, user, params) {
   const listing = state.listings.find(l => l.id === listingId && l.status === 'active');
   if (!listing) return redirect(res, '/market?error=notfound');
   if (listing.seller_id === user.id) return redirect(res, '/market?error=own');
-  if (balance(user.id, 'available') < listing.price) return redirect(res, '/market?error=insufficient');
+  const seller = state.users.find(item => item.id === listing.seller_id);
+  if (!seller || !canTrade(seller)) return redirect(res, '/market?error=age');
+  if (!Number.isSafeInteger(listing.price) || listing.price < 1 || balance(user.id, 'available') < listing.price) return redirect(res, '/market?error=insufficient');
 
   const orderId = crypto.randomUUID();
   recordTx('order_hold', user.id, { orderId, listingId, amount: listing.price }, [
