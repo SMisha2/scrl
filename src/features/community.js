@@ -90,10 +90,14 @@ function createPost(res, user, params, kind) {
   const description = (params.get('description') || '').trim().slice(0, 1500);
   const category = (params.get('category') || 'Другое').trim().slice(0, 40);
   const mode = PRICE_MODES[params.get('price_mode')] ? params.get('price_mode') : 'negotiable';
-  const price = Math.max(0, Math.floor(Number(params.get('price') || 0)));
-  const priceMax = Math.max(0, Math.floor(Number(params.get('price_max') || 0)));
+  const price = Number(params.get('price') || 0);
+  const priceMax = Number(params.get('price_max') || 0);
   const deadline = (params.get('deadline') || '').trim();
-  if (!title || !description || !category) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
+  if (!title || !description || !category || !Number.isSafeInteger(price) || price < 0 || price > 1000000 ||
+      !Number.isSafeInteger(priceMax) || priceMax < 0 || priceMax > 1000000 ||
+      (deadline && !/^\\d{4}-\\d{2}-\\d{2}$/.test(deadline))) {
+    return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
+  }
   if (mode === 'fixed' && price < 1) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
   if (mode === 'range' && (price < 1 || priceMax < price)) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
   const moderation = analyseText(title + '\n' + description + '\n' + category);
@@ -135,8 +139,8 @@ function handleRespond(res, user, params) {
   const post = collection.find(p => p.id === postId && p.status === 'active');
   const message = (params.get('message') || '').trim().slice(0, 700);
   const proposalType = ['paid', 'free', 'barter'].includes(params.get('proposal_type')) ? params.get('proposal_type') : 'paid';
-  const proposedPrice = Math.max(0, Math.floor(Number(params.get('proposed_price') || 0)));
-  if (!post || post.user_id === user.id || !message) return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=bad');
+  const proposedPrice = Number(params.get('proposed_price') || 0);
+  if (!post || post.user_id === user.id || !message || !Number.isSafeInteger(proposedPrice) || proposedPrice < 0 || proposedPrice > 1000000) return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=bad');
   if (proposalType === 'paid' && proposedPrice < 1 && post.price_mode !== 'fixed' && post.price_mode !== 'range') {
     return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=fields');
   }
@@ -162,7 +166,7 @@ function pageApplications(res, user, url) {
   const card = (a, received) => {
     const applicant = state.users.find(u => u.id === a.applicant_id);
     const post = (a.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(p => p.id === a.post_id);
-    const canAct = received && a.status === 'pending';
+    const canAct = received && a.status === 'pending' && post && post.status === 'active';
     return '<article class="card"><div class="row-between"><b>' + esc(post ? post.title : 'Публикация удалена') + '</b><span class="badge badge-muted">' + esc(a.status) + '</span></div>' +
       '<p class="muted small">' + (received ? 'Отклик от ' + esc(applicant ? applicant.full_name : 'пользователь') : 'Ваш отклик') + ' · ' + new Date(a.created_at).toLocaleString('ru-RU') + '</p>' +
       '<p class="mt-1">' + esc(a.message) + '</p><p class="mt-1"><b>' + (a.proposal_type === 'paid' ? a.proposed_price + ' ScRl' : a.proposal_type === 'free' ? 'Бесплатно' : 'Обмен') + '</b></p>' +
@@ -187,6 +191,8 @@ function handleApplicationAction(res, user, params) {
   }
   const post = (app.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(p => p.id === app.post_id);
   if (!post || post.status !== 'active') return redirect(res, '/applications?error=notfound');
+  const existingDeal = state.deals.find(deal => deal.post_id === post.id && deal.post_kind === app.post_kind && deal.status !== 'cancelled');
+  if (existingDeal) return redirect(res, '/applications?error=already_accepted');
   const buyerId = app.post_kind === 'demand' ? post.user_id : app.applicant_id;
   const sellerId = app.post_kind === 'demand' ? app.applicant_id : post.user_id;
   const price = app.proposal_type === 'paid' ? app.proposed_price : 0;
@@ -208,6 +214,8 @@ function handleApplicationAction(res, user, params) {
     ]);
   }
   state.deals.unshift(deal);
+  post.status = 'in_progress';
+  post.updated_at = new Date().toISOString();
   app.status = 'accepted';
   app.deal_id = deal.id;
   app.updated_at = new Date().toISOString();
@@ -316,6 +324,8 @@ function handleDealCancel(res, user, params) {
   }
   deal.status = 'cancelled';
   deal.cancelled_at = new Date().toISOString();
+  const post = (deal.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(item => item.id === deal.post_id);
+  if (post && post.status === 'in_progress') { post.status = 'active'; post.updated_at = new Date().toISOString(); }
   state.admin_audit_logs.push({
     id: crypto.randomUUID(), actor_id: user.id, action: 'deal_cancelled',
     target_id: deal.id, reason: 'Cancelled before delivery', created_at: new Date().toISOString()
@@ -329,7 +339,7 @@ function handleDealCancel(res, user, params) {
 function handleDealDispute(res, user, params) {
   const deal = state.deals.find(d => d.id === params.get('deal_id'));
   const reason = (params.get('reason') || '').trim().slice(0, 500);
-  if (!deal || ![deal.buyer_id, deal.seller_id].includes(user.id) || !reason || ['completed', 'cancelled'].includes(deal.status)) return redirect(res, '/deals?error=bad');
+  if (!deal || ![deal.buyer_id, deal.seller_id].includes(user.id) || !reason || !['accepted', 'in_progress', 'awaiting_confirmation'].includes(deal.status)) return redirect(res, '/deals?error=bad');
   deal.status = 'disputed';
   deal.dispute_reason = reason;
   deal.disputed_at = new Date().toISOString();
