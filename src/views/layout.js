@@ -274,7 +274,7 @@ function layout(title, user, content) {
       <a href="/auctions">Аукционы</a>
     ` : ''}
     ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a><a href="/auctions">Аукционы</a>` : ''}
-    ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/auctions">Аукционы</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/financial">Финансы</a>` : ''}
+    ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/admin/market">Курс ScRl</a><a href="/auctions">Аукционы</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/financial">Финансы</a>` : ''}
   `;
   const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
   const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
