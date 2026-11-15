@@ -188,7 +188,11 @@ function markForReviewWhenAiUnavailable(ruleResult) {
 }
 
 async function analyseSubmission(value) {
-  const ruleResult = analyseText(value);
+  const localResult = analyseText(value);
+  const ruleResult = {
+    ...localResult,
+    decision: localResult.requiresReview ? 'review' : 'keep'
+  };
   const config = getApiConfig();
   if (!config) return ruleResult;
 
