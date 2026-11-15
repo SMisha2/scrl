@@ -94,7 +94,7 @@ function handleCreateAuction(res, user, params) {
   const step = parseInt(params.get('min_step') || '10', 10);
   const minutes = parseInt(params.get('duration_min') || '5', 10);
   if (!title || !prize || !start || start < 1) return redirect(res, '/auctions?error=fields');
-  if (/(\\bRUB\\b|руб(ль|ля|лей|ли)?|₽|денежн|наличн)/i.test(prize)) return redirect(res, '/auctions?error=bad');
+  if (/(RUB|руб|₽|денежн|наличн)/i.test(prize)) return redirect(res, '/auctions?error=bad');
   state.auctions.push({
     id: crypto.randomUUID(), title, prize, start_price: start, min_step: step || 10,
     current_bid: 0, current_winner_id: null,
