@@ -121,32 +121,80 @@ function pageTokenMarket(res, user, url) {
     '<tr><td>' + new Date(item.bucket).toLocaleString('ru-RU') + '</td>' +
     '<td>' + Number(item.open).toFixed(4) + '</td><td>' + Number(item.high).toFixed(4) + '</td>' +
     '<td>' + Number(item.low).toFixed(4) + '</td><td>' + Number(item.close).toFixed(4) + '</td>' +
-    '<td>' + Number(item.samples || 0) + '</td></tr>'
+    '<td>' + Number(item.volume_scrl || 0).toLocaleString('ru-RU') + '</td></tr>'
   ).join('');
+  const trades = (state.token_market_trades || []).slice().reverse().slice(0, 15).map(item => {
+    const price = Number(item.amount_scrl) > 0 ? Number(item.amount_vrub) / Number(item.amount_scrl) : 0;
+    const buyer = state.users.find(person => person.id === item.buyer_id);
+    const seller = state.users.find(person => person.id === item.seller_id);
+    return '<tr><td>' + new Date(item.created_at).toLocaleString('ru-RU') + '</td>' +
+      '<td>' + esc(buyer ? buyer.full_name : '—') + '</td><td>' + esc(seller ? seller.full_name : '—') + '</td>' +
+      '<td>' + Number(item.amount_scrl).toLocaleString('ru-RU') + ' ScRl</td>' +
+      '<td>' + Number(item.amount_vrub).toLocaleString('ru-RU') + ' V-RUB</td>' +
+      '<td>' + price.toFixed(4) + '</td><td>' + Number(item.fee_scrl || 0).toLocaleString('ru-RU') + '</td></tr>';
+  }).join('');
   const money = value => Number(value || 0).toLocaleString('ru-RU');
+  const coveragePercent = market.coverageRatio * 100;
+  const coverageStatus = market.coverageRatio >= 1 ? 'Покрытие достаточное' : 'Есть избыток ScRl';
   sendHtml(res, layout('Курс ScRl', user, flashBox(url) +
-    '<div class="row-between"><div><h1>Курс ScRl</h1><p class="muted">Внутренний расчёт экономики · только V-RUB</p></div><a href="/admin" class="btn btn-ghost btn-sm">← Монитор</a></div>' +
+    '<div class="row-between"><div><h1>Экономика ScRl</h1><p class="muted">Рыночная цена, лимит обеспеченного выпуска и динамическое сжигание.</p></div><a href="/admin" class="btn btn-ghost btn-sm">← Монитор</a></div>' +
     '<div class="grid grid-3">' +
-      '<div class="card"><div class="muted small">Текущий курс</div><div style="font-size:25px;font-weight:750">' + market.referenceRate.toFixed(4) + ' V-RUB</div><div class="muted small">за 1 ScRl</div></div>' +
-      '<div class="card"><div class="muted small">V-RUB в кошельках</div><div style="font-size:25px;font-weight:750">' + money(market.virtualRubleSupply) + '</div></div>' +
-      '<div class="card"><div class="muted small">Весь выпуск ScRl</div><div style="font-size:25px;font-weight:750">' + money(market.totalIssuedScRl) + '</div></div>' +
-      '<div class="card"><div class="muted small">В обращении</div><div style="font-size:22px;font-weight:700">' + money(market.circulatingScRl) + ' ScRl</div></div>' +
-      '<div class="card"><div class="muted small">Резерв токенов</div><div style="font-size:22px;font-weight:700">' + money(market.reserveScRl) + ' ScRl</div></div>' +
-      '<div class="card"><div class="muted small">Сожжено</div><div style="font-size:22px;font-weight:700">' + money(market.burnedScRl) + ' ScRl</div></div>' +
+      '<div class="card balance"><div class="muted small">Рыночная цена</div><div style="font-size:25px;font-weight:750">' + market.marketPrice.toFixed(4) + ' V-RUB</div><div class="muted small">за 1 ScRl · VWAP сделок за 7 дней</div></div>' +
+      '<div class="card"><div class="muted small">Целевой курс</div><div style="font-size:25px;font-weight:750">' + market.targetRate.toFixed(4) + ' V-RUB</div><div class="muted small">используется для лимита выпуска</div></div>' +
+      '<div class="card"><div class="muted small">Обеспеченный курс</div><div style="font-size:25px;font-weight:750">' + market.backedRate.toFixed(4) + ' V-RUB</div><div class="muted small">V-RUB / ScRl в обращении</div></div>' +
+      '<div class="card"><div class="muted small">V-RUB участников</div><div style="font-size:22px;font-weight:700">' + money(market.virtualRubleSupply) + '</div></div>' +
+      '<div class="card"><div class="muted small">Максимум ScRl при целевом курсе</div><div style="font-size:22px;font-weight:700">' + money(market.maxSupportedScRl) + '</div></div>' +
+      '<div class="card"><div class="muted small">ScRl в обращении</div><div style="font-size:22px;font-weight:700">' + money(market.circulatingScRl) + '</div></div>' +
+      '<div class="card"><div class="muted small">Избыток ScRl</div><div style="font-size:22px;font-weight:700">' + money(market.excessScRl) + '</div></div>' +
+      '<div class="card"><div class="muted small">Резерв для будущей выдачи</div><div style="font-size:22px;font-weight:700">' + money(market.reserveScRl) + ' ScRl</div></div>' +
+      '<div class="card"><div class="muted small">Сожжено и выведено из обращения</div><div style="font-size:22px;font-weight:700">' + money(market.burnedScRl) + ' ScRl</div></div>' +
     '</div>' +
-    '<section class="card mt-2"><div class="row-between"><h2>Свечной график курса</h2><span class="muted small">Почасовые наблюдения · до 14 дней</span></div>' +
-      '<p class="muted small">Зелёная свеча — курс вырос за час, красная — снизился, серая — не изменился. Снимки создаются при открытии биржи/монитора и после сделок; это не внешняя рыночная котировка.</p>' +
+    '<section class="card mt-2"><div class="row-between"><h2>Покрытие выпуска</h2><b>' + coveragePercent.toFixed(1) + '% · ' + coverageStatus + '</b></div>' +
+      '<div class="progress"><div class="progress-bar" style="width:' + Math.max(0, Math.min(100, coveragePercent)) + '%"></div></div>' +
+      '<p class="muted small mt-1">Оставшаяся ёмкость выпуска: ' + money(market.remainingCapacityScRl) + ' ScRl. Если обращение выше лимита, новые начисления блокируются, а комиссия биржи повышается и сжигает часть ScRl при обмене.</p>' +
+      '<div class="grid grid-2 mt-1"><div><div class="muted small">Текущая комиссия сжигания</div><h2>' + (market.burnFeeRate * 100).toFixed(2) + '%</h2></div><div><div class="muted small">Объём сделок за 7 дней</div><h2>' + money(market.marketVolumeScRl) + ' ScRl / ' + money(market.marketVolumeVrub) + ' V-RUB</h2></div></div>' +
+    '</section>' +
+    '<section class="card"><h2>Настройка целевого курса</h2><p class="muted small">Целевой курс задаёт лимит обеспеченного выпуска. Рыночная цена продолжает определяться совершёнными сделками.</p>' +
+      '<form method="POST" action="/admin/market/settings" class="grid grid-2"><div><label>Целевой курс, V-RUB за 1 ScRl</label><input name="target_rate" type="number" min="0.0001" max="100" step="0.0001" value="' + market.targetRate.toFixed(4) + '" required></div>' +
+      '<div style="display:flex;align-items:end"><button class="btn btn-primary" type="submit">Сохранить целевой курс</button></div></form></section>' +
+    '<section class="card"><div class="row-between"><h2>Свечной график рыночной цены</h2><span class="muted small">Почасовые свечи · до 14 дней</span></div>' +
+      '<p class="muted small">Здесь отображается VWAP по реально совершённым внутренним сделкам. Без сделок используется целевой курс. Это не внешняя биржевая котировка и не курс реальных рублей.</p>' +
       '<div class="mt-1">' + candlestickSvg(market.candles) + '</div>' +
     '</section>' +
-    '<section class="card"><h2>Как рассчитывается курс</h2><p><b>Курс = V-RUB в кошельках участников ÷ весь выпуск ScRl.</b></p>' +
-      '<p class="muted small mt-1">В выпуск входят доступные и заблокированные токены участников, системный резерв и сожжённые токены. Сделки проверяют остатки счетов до записи, поэтому нельзя потратить больше имеющегося баланса.</p>' +
-      '<div class="alert alert-info mt-1"><b>Реальное покрытие RUB: 0.</b> Платёжный партнёр и реальные пополнения/выводы не подключены. V-RUB — только внутренняя виртуальная единица; график не показывает банковский курс и не обещает выкуп токенов за деньги.</div>' +
+    '<section class="card"><h2>Последние сделки</h2>' +
+      (trades ? '<table><thead><tr><th>Дата</th><th>Покупатель</th><th>Продавец</th><th>Объём</th><th>V-RUB</th><th>Цена</th><th>Сожжено</th></tr></thead><tbody>' + trades + '</tbody></table>' : '<p class="muted">Пока нет совершённых сделок. Первая цена будет взята из целевого курса.</p>') +
     '</section>' +
-    '<section class="card"><h2>История свечей</h2>' +
-      (rows ? '<table><thead><tr><th>Час</th><th>Открытие</th><th>Максимум</th><th>Минимум</th><th>Закрытие</th><th>Снимков</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="muted">История пока пуста.</p>') +
+    '<section class="card"><h2>Правила экономики</h2>' +
+      '<p><b>Рыночная цена = сумма V-RUB сделок за 7 дней ÷ объём ScRl, полученный покупателями.</b></p>' +
+      '<p class="mt-1"><b>Максимум обеспеченного ScRl = V-RUB в кошельках участников ÷ целевой курс.</b></p>' +
+      '<p class="muted small mt-1">В обращении учитываются доступные и заблокированные ScRl учеников. Системный резерв не считается выпущенным токеном, а сожжённые ScRl исключаются навсегда. Новые начисления из резерва останавливаются, если превысят обеспеченный лимит.</p>' +
+      '<div class="alert alert-info mt-1"><b>Реальное покрытие RUB: 0.</b> V-RUB — виртуальная единица проекта. Платёжный партнёр, реальные пополнения и выплаты не подключены; график не обещает обмен на настоящие деньги.</div>' +
     '</section>'
   ));
 }
+
+function handleTokenMarketSettings(res, user, params) {
+  if (user.role !== 'admin') return redirect(res, '/');
+  const value = Number(params.get('target_rate') || 0);
+  if (!Number.isFinite(value) || value < 0.0001 || value > 100) {
+    return redirect(res, '/admin/market?error=fields');
+  }
+  const targetRate = Math.round(value * 10000) / 10000;
+  state.settings.token_target_rate = targetRate;
+  state.settings.token_target_rate_updated_at = new Date().toISOString();
+  state.settings.token_target_rate_updated_by = user.id;
+  if (!Array.isArray(state.admin_audit_logs)) state.admin_audit_logs = [];
+  state.admin_audit_logs.push({
+    id: crypto.randomUUID(), actor_id: user.id,
+    action: 'token_market_target_rate_updated',
+    reason: 'Целевой курс ScRl изменён на ' + targetRate + ' V-RUB',
+    created_at: new Date().toISOString()
+  });
+  recordTokenRateCandle();
+  save();
+  return redirect(res, '/admin/market?msg=target_updated');
+}
+
 
 function pageFinancialOps(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
@@ -161,4 +209,4 @@ function pageFinancialOps(res, user, url) {
     '<section class="card"><h2>Журнал</h2>' + (rows ? '<table><thead><tr><th>ID</th><th>Участник</th><th>Тип</th><th>ScRl</th><th>RUB</th><th>Статус</th><th>Режим</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="muted">Операций пока нет.</p>') + '</section>'));
 }
 
-module.exports = { pageRubWallet, handleSandboxTopUp, handleSandboxPayout, pageFinancialOps, pageTokenMarket };
+module.exports = { pageRubWallet, handleSandboxTopUp, handleSandboxPayout, pageFinancialOps, pageTokenMarket, handleTokenMarketSettings };
