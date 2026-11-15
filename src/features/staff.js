@@ -8,7 +8,7 @@ const { layout } = require('../views/layout');
 const { getTokenMarketStats } = require('../services/token-market');
 const { sessions } = require('../session');
 const { hashPassword } = require('../security');
-const { changeUserRole, anonymizeUser } = require('../services/user-admin');
+const { changeUserRole, anonymizeUser, hasOpenActivities } = require('../services/user-admin');
 function pageTeacher(res, user, url) {
   if (user.role !== 'teacher') return redirect(res, '/');
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -327,11 +327,15 @@ function pageAdminUsers(res, user, url) {
     String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 20).map(entry => {
       const actor = state.users.find(item => item.id === entry.actor_id);
       const target = state.users.find(item => item.id === entry.target_id);
+      const detail = entry.action === 'user_role_changed'
+        ? (roleNames[entry.from_role] || 'Роль') + ', новая роль: ' + (roleNames[entry.to_role] || 'изменена') +
+          (entry.class_name ? ', класс: ' + entry.class_name : '')
+        : (entry.reason || '');
       return '<tr><td>' + esc(entry.created_at ? new Date(entry.created_at).toLocaleString('ru-RU') : '') +
         '</td><td>' + esc(auditLabels[entry.action] || 'Действие') +
         '</td><td>' + esc(actor ? actor.full_name : 'Неизвестно') +
         '</td><td>' + esc(target ? target.full_name : 'Удалённая запись') +
-        '</td><td>' + esc(entry.reason || '') + '</td></tr>';
+        '</td><td>' + esc(detail) + '</td></tr>';
     }).join('');
 
   sendHtml(res, layout('Пользователи', user,
@@ -492,15 +496,9 @@ function handleDeleteUser(res, admin, params) {
   }
   const reason = (params.get('reason') || '').trim().slice(0, 300);
   if (!reason) return redirect(res, '/admin/users?error=fields');
-  const activeDeals = (state.deals || []).some(deal =>
-    [deal.buyer_id, deal.seller_id].includes(target.id) &&
-    ['accepted', 'in_progress', 'awaiting_confirmation', 'disputed'].includes(deal.status)
-  );
-  const activeOrders = (state.orders || []).some(order =>
-    [order.buyer_id, order.seller_id].includes(target.id) &&
-    ['awaiting_delivery', 'awaiting_confirmation', 'disputed'].includes(order.status)
-  );
-  if (activeDeals || activeOrders) return redirect(res, '/admin/users?error=active_work');
+  if (hasOpenActivities(target.id, state.deals || [], state.orders || [])) {
+    return redirect(res, '/admin/users?error=active_work');
+  }
   if (params.get('confirmation') !== 'УДАЛИТЬ') {
     return redirect(res, '/admin/users?error=confirmation');
   }
