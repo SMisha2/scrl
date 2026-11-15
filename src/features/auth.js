@@ -8,6 +8,39 @@ const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 
 const DEMO_MODE = process.env.SCRL_DEMO_MODE === 'true';
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 6;
+const loginFailures = new Map();
+
+function loginRateLimited(req, email) {
+  const ip = String(req.socket?.remoteAddress || 'unknown').slice(0, 80);
+  const key = ip + '|' + email;
+  const now = Date.now();
+  const record = loginFailures.get(key);
+  if (!record) return false;
+  if (record.blockedUntil > now) return true;
+  if (now - record.windowStart >= LOGIN_WINDOW_MS) loginFailures.delete(key);
+  return false;
+}
+
+function recordLoginFailure(req, email) {
+  const ip = String(req.socket?.remoteAddress || 'unknown').slice(0, 80);
+  const key = ip + '|' + email;
+  const now = Date.now();
+  const old = loginFailures.get(key);
+  const record = !old || now - old.windowStart >= LOGIN_WINDOW_MS
+    ? { count: 0, windowStart: now, blockedUntil: 0 }
+    : old;
+  record.count += 1;
+  if (record.count >= LOGIN_MAX_ATTEMPTS) record.blockedUntil = now + LOGIN_WINDOW_MS;
+  loginFailures.set(key, record);
+  if (loginFailures.size > 5000) {
+    for (const [entryKey, entry] of loginFailures) {
+      if (now - entry.windowStart > LOGIN_WINDOW_MS && entry.blockedUntil <= now) loginFailures.delete(entryKey);
+    }
+  }
+}
+
 
 function sessionCookie(req, token, maxAge) {
   const secure = Boolean(req.socket && req.socket.encrypted) ||
@@ -38,11 +71,15 @@ function pageLogin(res, user, url) {
 function doLogin(req, res, params) {
   const email = (params.get('email') || '').trim().toLowerCase();
   const password = params.get('password') || '';
+  if (loginRateLimited(req, email)) return redirect(res, '/login?error=wrong');
   const isDemoAccount = email.endsWith('@scrl.demo');
   const user = state.users.find(item => item.email === email);
   if (!user || (isDemoAccount && !DEMO_MODE) || !verifyPassword(password, user.password_hash)) {
+    recordLoginFailure(req, email);
     return redirect(res, '/login?error=wrong');
   }
+  const ip = String(req.socket?.remoteAddress || 'unknown').slice(0, 80);
+  loginFailures.delete(ip + '|' + email);
   if (user.is_blocked) return redirect(res, '/login?error=blocked_acc');
 
   if (!user.password_hash.startsWith('scrypt$')) {
