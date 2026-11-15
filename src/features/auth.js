@@ -7,7 +7,7 @@ const { sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 
-const DEMO_MODE = process.env.SCRL_DEMO_MODE === 'true';
+const DEMO_MODE = process.env.SCRL_DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 6;
 const loginFailures = new Map();
