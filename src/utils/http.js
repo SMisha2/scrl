@@ -7,26 +7,27 @@ function esc(value) {
 
 function readBody(req, limit = 64 * 1024) {
   return new Promise((resolve, reject) => {
-    let data = '';
+    const chunks = [];
     let size = 0;
     let exceeded = false;
     req.on('data', chunk => {
       size += chunk.length;
       if (size > limit) {
         exceeded = true;
-        data = '';
+        chunks.length = 0;
         return;
       }
-      if (!exceeded) data += chunk.toString('utf8');
+      if (!exceeded) chunks.push(Buffer.from(chunk));
     });
     req.on('end', () => {
       if (exceeded) {
         const error = new Error('Request body too large');
         error.statusCode = 413;
         reject(error);
-      } else resolve(data);
+      } else resolve(Buffer.concat(chunks).toString('utf8'));
     });
     req.on('error', reject);
+    req.on('aborted', () => reject(new Error('Request aborted')));
   });
 }
 
