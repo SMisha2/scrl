@@ -519,20 +519,20 @@ function recordTx(kind, initiator, payload, entries) {
   const totalDelta = resolved.reduce((sum, item) => sum + item.amount, 0);
   if (!Number.isSafeInteger(totalDelta) || totalDelta !== 0) throw new Error('Unbalanced transaction');
 
-  // All new ScRl issued from the system reserve must fit under the current
-  // V-RUB-backed circulation cap. Transfers between students are unaffected.
-  if (['signup_bonus', 'credit_teacher', 'credit_admin'].includes(kind)) {
-    const issueAmount = resolved
-      .filter(item => item.account.user_id && ['available', 'held'].includes(item.account.kind) && item.amount > 0)
-      .reduce((sum, item) => sum + item.amount, 0);
-    if (issueAmount > 0) {
-      const capacity = require('./services/token-market').canIssueScRl(issueAmount);
-      if (!capacity.allowed) {
-        const error = new Error('ScRl issuance exceeds the V-RUB-backed circulation limit');
-        error.code = 'backing_limit';
-        error.capacity = capacity;
-        throw error;
-      }
+  // Any transaction that increases the combined student ScRl balance is
+  // issuance, regardless of its transaction label. Transfers between students
+  // net to zero; refunds, debits and burns do not increase the supply.
+  const studentIds = new Set(state.users.filter(user => user.role === 'student').map(user => user.id));
+  const netStudentScRlDelta = resolved
+    .filter(item => studentIds.has(item.account.user_id) && ['available', 'held'].includes(item.account.kind))
+    .reduce((sum, item) => sum + item.amount, 0);
+  if (netStudentScRlDelta > 0) {
+    const capacity = require('./services/token-market').canIssueScRl(netStudentScRlDelta);
+    if (!capacity.allowed) {
+      const error = new Error('ScRl issuance exceeds the V-RUB-backed circulation limit');
+      error.code = 'backing_limit';
+      error.capacity = capacity;
+      throw error;
     }
   }
 
