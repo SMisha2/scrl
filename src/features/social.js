@@ -47,6 +47,45 @@ function handleReportPost(res, user, params) {
   return redirect(res, kind === 'offer' ? '/offers?msg=reported' : '/demand?msg=reported');
 }
 
+function handleReportListing(res, user, params) {
+  if (user.role !== 'student') return redirect(res, '/');
+  const listingId = params.get('listing_id');
+  const listing = state.listings.find(item => item.id === listingId && item.status === 'active');
+  if (!listing || listing.seller_id === user.id) return redirect(res, '/market?error=bad');
+
+  const existing = state.reports.find(report =>
+    report.target_type === 'listing' && report.target_id === listing.id &&
+    (report.created_by || report.reporter_id) === user.id && report.status === 'open'
+  );
+  if (existing) return redirect(res, '/market?msg=reported');
+
+  const reasons = {
+    unsafe: 'Опасный товар или услуга',
+    privacy: 'Личные данные',
+    harassment: 'Оскорбления или угрозы',
+    spam: 'Спам или обман',
+    other: 'Другое'
+  };
+  const code = params.get('reason_code') || 'other';
+  const details = (params.get('details') || '').trim().slice(0, 300);
+  const reason = (reasons[code] || reasons.other) + (details ? ': ' + details : '');
+  const now = new Date().toISOString();
+  state.reports.unshift({
+    id: crypto.randomUUID(), target_type: 'listing', target_id: listing.id,
+    created_by: user.id, reason, reason_code: reasons[code] ? code : 'other',
+    status: 'open', created_at: now
+  });
+  state.admin_audit_logs.push({
+    id: crypto.randomUUID(), actor_id: user.id, action: 'listing_reported',
+    target_id: listing.id, reason, created_at: now
+  });
+  state.users.filter(item => item.role === 'admin').forEach(admin =>
+    notify(admin.id, 'moderation', 'Новая жалоба на Marketplace', 'Поступила жалоба на объявление «' + listing.title + '».', '/admin/moderation')
+  );
+  save();
+  return redirect(res, '/market?msg=reported');
+}
+
 function pageFavorites(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
   const favs = state.favorites.filter(f => f.user_id === user.id);
@@ -59,4 +98,4 @@ function pageFavorites(res, user, url) {
   sendHtml(res, layout('Избранное', user, flashBox(url) + '<h1>Избранное</h1>' + (cards || '<div class="card"><p class="muted">Вы пока ничего не добавили в избранное.</p></div>')));
 }
 
-module.exports = { handleReportPost, pageFavorites };
+module.exports = { handleReportPost, handleReportListing, pageFavorites };
