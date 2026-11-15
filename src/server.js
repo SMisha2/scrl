@@ -11,18 +11,31 @@ const { pageExchange, handleExchangeSell, handleExchangeCancel, handleExchangeBu
 const { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock } = require('./features/staff');
 const community = require('./features/community');
 const assistant = require('./features/assistant');
-const moderation = require('./features/moderation');
+const moderation = require('./features/moderation-v2');
 const social = require('./features/social');
 const finance = require('./features/finance');
 
+function isSameOrigin(req) {
+  const expectedHost = String(req.headers.host || '').toLowerCase();
+  const source = req.headers.origin || req.headers.referer;
+  if (!source) return true;
+  try {
+    const parsed = new URL(source);
+    return ['http:', 'https:'].includes(parsed.protocol) && parsed.host.toLowerCase() === expectedHost;
+  } catch {
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const url = new URL(req.url || '/', 'http://localhost');
     const path = url.pathname;
     const method = req.method;
     const user = getSessionUser(req);
     let params = new URLSearchParams();
     if (method === 'POST') {
+      if (!isSameOrigin(req)) return sendHtml(res, '<h1>403</h1><p>Недопустимый источник запроса.</p>', 403);
       const body = await readBody(req);
       params = new URLSearchParams(body);
     }
@@ -40,7 +53,7 @@ const server = http.createServer(async (req, res) => {
 
     if (!user) return redirect(res, '/login');
     if (user.is_blocked) {
-      for (const [k, v] of sessions) if (v === user.id) sessions.delete(k);
+      for (const [k, v] of sessions) if ((typeof v === 'string' ? v : v && v.userId) === user.id) sessions.delete(k);
       return redirect(res, '/login?error=blocked_acc');
     }
 
@@ -110,7 +123,10 @@ const server = http.createServer(async (req, res) => {
     sendHtml(res, layout('404', user, '<div class="card"><h1>404</h1><p>Страница не найдена</p><a href="/" class="btn btn-primary mt-2">На главную</a></div>'), 404);
   } catch (e) {
     console.error(e);
-    sendHtml(res, `<h1>Ошибка</h1><pre>${esc(e.stack || e.message)}</pre><a href="/">На главную</a>`, 500);
+    if (res.headersSent || res.destroyed) return;
+    const status = e && e.statusCode === 413 ? 413 : 500;
+    const body = status === 413 ? '<h1>413</h1><p>Слишком большой запрос.</p>' : '<h1>500</h1><p>Внутренняя ошибка. Попробуйте позже.</p><a href="/">На главную</a>';
+    sendHtml(res, body, status);
   }
 });
 
