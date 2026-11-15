@@ -1,1 +1,5 @@
 scrl-data.json
+scrl-data.json.tmp
+node_modules/
+*.log
+.env
