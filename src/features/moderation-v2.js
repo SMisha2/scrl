@@ -5,6 +5,7 @@ const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { notify } = require('../utils/notifications');
 const { analyseText } = require('../services/moderation-rules');
+const { getApiConfig } = require('../services/ai-moderation');
 
 function audit(admin, action, targetId, reason) {
   state.admin_audit_logs.push({
@@ -163,7 +164,9 @@ function pageModeration(res, user, url) {
       '<td class="small">' + esc(entry.reason || '—') + '</td></tr>';
   }).join('');
   sendHtml(res, layout('Модерация', user, flashBox(url) +
-    '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted">Автофильтр — это сигнал, а не доказательство нарушения. Решения остаются за администратором.</p></div><div class="row"><form method="POST" action="/admin/moderation/scan"><button class="btn btn-ghost">Повторно проверить публикации</button></form><a class="btn btn-primary" href="/admin/ai">Помощник</a></div></div>' +
+    '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted">Автофильтр — это сигнал, а не доказательство нарушения. Решения остаются за администратором.</p>' +
+    (getApiConfig() ? '<p class="small"><span class="badge badge-accent">Расширенная проверка подключена</span></p>' : '<p class="small muted">Расширенная проверка не настроена — работают локальные правила.</p>') +
+    '</div><div class="row"><form method="POST" action="/admin/moderation/scan"><button class="btn btn-ghost">Повторно проверить публикации</button></form><a class="btn btn-primary" href="/admin/ai">Помощник</a></div></div>' +
     metrics + search + '<h2 class="mt-2">Проверки и споры (' + cases.length + ')</h2>' +
     (caseHtml || '<div class="card"><p class="muted">Открытых проверок нет.</p></div>') +
     '<h2 class="mt-2">Жалобы пользователей (' + reports.length + ')</h2>' +
