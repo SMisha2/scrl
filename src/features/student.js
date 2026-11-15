@@ -46,11 +46,11 @@ function pageApp(res, user, url) {
       <div><h1 style="margin-bottom:2px">Главная</h1><p class="muted">Попроси о помощи или поделись тем, что умеешь.</p></div>
       <span class="badge badge-primary-soft">Личный кабинет</span>
     </div>
-    <section class="card balance" style="padding:24px">
+    <section class="card balance home-wallet">
       <div class="row-between">
         <div>
           <div class="muted small">Ваш кошелёк · доступно</div>
-          <div style="font-size:34px;font-weight:750;letter-spacing:-1px;margin:5px 0">🪙 ${av.toLocaleString('ru-RU')} ScRl</div>
+          <div style="font-size:34px;font-weight:750;letter-spacing:-1px;margin:5px 0">${av.toLocaleString('ru-RU')} ScRl</div>
           <div class="muted small">В резерве сделок: ${hd.toLocaleString('ru-RU')} ScRl</div>
         </div>
         <a class="btn btn-primary" href="/wallet">Открыть кошелёк <span aria-hidden="true">→</span></a>
