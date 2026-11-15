@@ -47,6 +47,7 @@ function pageBoard(res, user, url, kind) {
   const posts = collection
     .filter(p => (p.status === 'active' || p.status === 'pending') &&
       (p.status === 'active' || p.user_id === user.id) &&
+      (p.user_id === user.id || !state.users.find(owner => owner.id === p.user_id)?.is_blocked) &&
       (!q || (p.title + ' ' + p.description).toLowerCase().includes(q)) &&
       (!category || p.category === category))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -154,12 +155,13 @@ function handleRespond(res, user, params) {
   const kind = params.get('post_kind') === 'offer' ? 'offer' : 'demand';
   const collection = kind === 'demand' ? state.demand_posts : state.offer_posts;
   const post = collection.find(item => item.id === postId && item.status === 'active');
+  const postOwner = post && state.users.find(item => item.id === post.user_id);
   const message = (params.get('message') || '').trim().slice(0, 700);
   const proposalType = ['paid', 'free', 'barter'].includes(params.get('proposal_type'))
     ? params.get('proposal_type') : 'paid';
   const proposedPrice = Number(params.get('proposed_price') || 0);
 
-  if (!post || post.user_id === user.id || !message ||
+  if (!post || !postOwner || postOwner.is_blocked || post.user_id === user.id || !message ||
       !Number.isSafeInteger(proposedPrice) || proposedPrice < 0 || proposedPrice > 1000000) {
     return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=bad');
   }
