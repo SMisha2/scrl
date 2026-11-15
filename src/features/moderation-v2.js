@@ -312,11 +312,11 @@ function handleModerationAction(res, user, params) {
     );
   } else if (item.kind === 'market_order') {
     const order = state.orders.find(entry => entry.id === item.target_id);
-    if (!order || order.status !== 'disputed') return redirect(res, '/admin/moderation?error=order_state');
+    if (!order || order.status !== 'disputed') return redirect(res, '/admin/moderation?error=deal_state');
     if (!['refund_buyer', 'release_seller'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
 
     const price = Number(order.price || 0);
-    if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/admin/moderation?error=order_amount');
+    if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/admin/moderation?error=deal_amount');
     const ledger = orderLedgerState(order);
     if (ledger.settlement && ledger.decision !== decision) return redirect(res, '/admin/moderation?error=already_settled');
 
