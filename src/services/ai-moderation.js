@@ -113,8 +113,9 @@ function parseModelResult(payload) {
 
   try {
     const parsed = JSON.parse(cleaned.slice(start, end + 1));
-    const codes = [...new Set((Array.isArray(parsed.categories) ? parsed.categories : [])
-      .filter(code => Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, code)))];
+    if (!Array.isArray(parsed.categories)) return null;
+    if (parsed.categories.some(code => !Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, code))) return null;
+    const codes = [...new Set(parsed.categories)];
 
     if (parsed.decision === 'keep') {
       return codes.length ? null : normalizeResult('low', []);
@@ -192,7 +193,7 @@ async function analyseSubmission(value) {
   if (!config) return ruleResult;
 
   const safeText = sanitizeModerationInput(value);
-  if (!safeText) return ruleResult;
+  if (!safeText) return markForReviewWhenAiUnavailable(ruleResult);
 
   try {
     const response = await fetch(config.endpoint, {
