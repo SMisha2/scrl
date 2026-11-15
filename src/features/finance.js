@@ -90,7 +90,7 @@ function candlestickSvg(candles) {
   const plotWidth = width - padding * 2;
   const y = value => padding + ((max - value) / (max - min)) * plotHeight;
   const slot = plotWidth / candles.length;
-  const barWidth = Math.max(4, Math.min(18, slot * 0.55));
+  const barWidth = Math.max(1, Math.min(18, slot * 0.55));
   const shapes = candles.map((item, index) => {
     const x = padding + slot * (index + 0.5);
     const open = Number(item.open) || 0;
@@ -135,7 +135,7 @@ function pageTokenMarket(res, user, url) {
       '<div class="card"><div class="muted small">Сожжено</div><div style="font-size:22px;font-weight:700">' + money(market.burnedScRl) + ' ScRl</div></div>' +
     '</div>' +
     '<section class="card mt-2"><div class="row-between"><h2>Свечной график курса</h2><span class="muted small">Почасовые наблюдения · до 14 дней</span></div>' +
-      '<p class="muted small">Зелёная свеча — курс вырос за час, красная — снизился, серая — не изменился.</p>' +
+      '<p class="muted small">Зелёная свеча — курс вырос за час, красная — снизился, серая — не изменился. Снимки создаются при открытии биржи/монитора и после сделок; это не внешняя рыночная котировка.</p>' +
       '<div class="mt-1">' + candlestickSvg(market.candles) + '</div>' +
     '</section>' +
     '<section class="card"><h2>Как рассчитывается курс</h2><p><b>Курс = V-RUB в кошельках участников ÷ весь выпуск ScRl.</b></p>' +
