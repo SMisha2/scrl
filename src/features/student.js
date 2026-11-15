@@ -73,11 +73,11 @@ function pageApp(res, user, url) {
     </div>
     <section class="card mt-2">
       <div class="row-between">
-        <div><h2>Справочный курс ScRl</h2><p class="muted small">Внутренняя учебная экономика</p></div>
+        <div><h2>Рыночный курс ScRl</h2><p class="muted small">Цена меняется после совершённых обменов</p></div>
         <a class="btn btn-ghost btn-sm" href="/exchange">Открыть биржу</a>
       </div>
-      <div class="mt-1"><div class="muted small">Расчётный ориентир</div><div style="font-size:23px;font-weight:700">1 ScRl = ${rate.toLocaleString('ru-RU', {minimumFractionDigits:4,maximumFractionDigits:4})} V-RUB</div></div>
-      <p class="muted small mt-1">Курс рассчитывается по общему балансу виртуальных рублей и общему выпуску ScRl. V-RUB не является реальными рублями и не выводится из системы.</p>
+      <div class="mt-1"><div class="muted small">Средняя цена сделок за 7 дней</div><div style="font-size:23px;font-weight:700">1 ScRl = ${rate.toLocaleString('ru-RU', {minimumFractionDigits:4,maximumFractionDigits:4})} V-RUB</div></div>
+      <p class="muted small mt-1">Цена определяется по совершённым обменам. V-RUB — внутренняя виртуальная единица, не реальные рубли.</p>
     </section>`));
 }
 
