@@ -25,13 +25,20 @@ function pageApp(res, user, url) {
         <span class="muted">${esc(tx ? tx.kind : 'Операция')}</span>
         <b class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${e.amount} ScRl</b></li>`;
     }).join('');
-  const activeOrders = state.orders
-    .filter(o => (o.buyer_id === user.id || o.seller_id === user.id) && ['awaiting_delivery', 'awaiting_confirmation'].includes(o.status))
-    .slice(0, 5)
-    .map(o => `<li class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">
-      <span>${o.buyer_id === user.id ? 'Покупка' : 'Продажа'}</span>
-      <span class="muted">${o.price} ScRl</span>
-      <span class="badge badge-muted">${esc(o.status)}</span></li>`).join('');
+  const activeLabels = { accepted: 'Принята', in_progress: 'В работе', awaiting_confirmation: 'Ждёт подтверждения' };
+  const activeOrders = (state.deals || [])
+    .filter(deal => (deal.buyer_id === user.id || deal.seller_id === user.id) && ['accepted', 'in_progress', 'awaiting_confirmation'].includes(deal.status))
+    .sort((x, y) => String(y.updated_at || y.created_at).localeCompare(String(x.updated_at || x.created_at)))
+    .slice(0, 4)
+    .map(deal => {
+      const collection = deal.post_kind === 'demand' ? state.demand_posts : state.offer_posts;
+      const post = collection.find(item => item.id === deal.post_id);
+      const otherId = deal.buyer_id === user.id ? deal.seller_id : deal.buyer_id;
+      const other = state.users.find(item => item.id === otherId);
+      return '<li class="home-list-row"><a href="/deal?id=' + encodeURIComponent(deal.id) + '">' +
+        esc(post ? post.title : 'Договорённость') + '</a><span class="muted small">' +
+        esc(activeLabels[deal.status] || 'Активна') + ' · ' + esc(other ? other.full_name : 'Участник') + '</span></li>';
+    }).join('');
 
   sendHtml(res, layout('Главная', user, `
     ${flashBox(url)}
