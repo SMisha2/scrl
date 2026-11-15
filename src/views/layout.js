@@ -11,7 +11,7 @@ a:hover{text-decoration:underline}
 .logo{font-weight:700;color:#0F766E;font-size:20px;display:flex;align-items:center;gap:8px;text-decoration:none!important}
 .coin{display:inline-flex;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#F59E0B,#D97706);color:#fff;font-weight:700;font-size:13px;align-items:center;justify-content:center}
 .nav{display:flex;gap:2px;flex:1;flex-wrap:wrap}
-.nav a{padding:8px 12px;border-radius:8px;color:#1C1917;font-weight:500;font-size:14px;text-decoration:none!important}
+.nav a{padding:6px 8px;border-radius:8px;color:#1C1917;font-weight:500;font-size:12px;text-decoration:none!important}
 .nav a:hover{background:#CCFBF1}
 .header-right{display:flex;align-items:center;gap:12px}
 .user-info{display:flex;flex-direction:column;font-size:13px;text-align:right}
@@ -208,7 +208,7 @@ th { color: var(--muted); background: var(--table-head); }
 @media (min-width: 761px) and (max-width: 1024px) {
   .container { padding-left: 18px; padding-right: 18px; }
   .header-inner { gap: 12px; }
-  .nav a { padding: 8px 9px; font-size: 13px; }
+  .nav a { padding: 6px 7px; font-size: 12px; }
   .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -244,11 +244,14 @@ function autoRefreshScript() {
 function layout(title, user, content) {
   const navItems = !user ? '' : `
     ${user.role === 'student' ? `
-      <a href="/app">Главная</a><a href="/market">Маркет</a><a href="/orders">Заказы</a>
-      <a href="/auctions">Аукционы</a><a href="/exchange">Биржа</a><a href="/wallet">Кошелёк</a>
+      <a href="/app">Главная</a><a href="/marketplace">Каталог</a>
+      <a href="/demand">Спрос</a><a href="/offer">Предложения</a>
+      <a href="/applications">Отклики</a><a href="/deals">Сделки</a>
+      <a href="/auctions">Аукционы</a><a href="/wallet">Кошелёк</a>
+      <a href="/notifications">Уведомления</a><a href="/profile">Профиль</a>
     ` : ''}
     ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a>` : ''}
-    ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a>` : ''}
+    ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/finance">Финансы</a>` : ''}
   `;
   const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
   const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
