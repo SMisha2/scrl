@@ -192,6 +192,53 @@ tbody tr:last-child td{border-bottom:0}
  th,td{white-space:nowrap}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
+/* Admin economy: a ledger view built around the circulation balance. */
+.economy-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-bottom:19px;border-bottom:1px solid var(--border);margin-bottom:27px}
+.economy-header h1{margin-bottom:3px;font-size:29px}
+.economy-header p{color:var(--muted);font-size:13px}
+.economy-updated{color:var(--muted);font-size:11px;white-space:nowrap}
+.economy-overview{display:grid;grid-template-columns:minmax(230px,.78fr) minmax(0,1.22fr);gap:48px;align-items:start}
+.economy-primary{padding:7px 0 21px;border-bottom:1px solid var(--border)}
+.economy-label{display:block;color:var(--muted);font-size:12px}
+.economy-primary strong{display:inline-block;margin-top:7px;font-size:43px;line-height:1.05;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums}
+.economy-unit{margin-left:7px;color:var(--muted);font-size:13px}
+.economy-primary p{margin-top:13px;color:var(--muted);font-size:12px}
+.economy-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0}
+.economy-facts>div{padding:1px 16px 14px 0;border-bottom:1px solid var(--border);margin-bottom:13px}
+.economy-facts>div:nth-child(odd){border-right:1px solid var(--border);margin-right:18px}
+.economy-facts dt{color:var(--muted);font-size:11px}
+.economy-facts dd{margin:4px 0 0;font-size:17px;font-weight:620;font-variant-numeric:tabular-nums}
+.economy-activity{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;padding:16px 0;margin:14px 0 19px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.economy-activity>div{display:flex;flex-direction:column;gap:3px}
+.economy-activity strong{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.economy-activity span{color:var(--muted);font-size:11px}
+.economy-actions{display:flex;flex-wrap:wrap;gap:20px;padding:0 0 18px;border-bottom:1px solid var(--border)}
+.economy-actions a{font-size:13px;font-weight:550}
+.economy-transactions{margin-top:27px}
+.economy-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:15px;margin-bottom:9px}
+.economy-section-heading h2{margin:0;font-size:16px}
+.economy-section-heading span{color:var(--muted);font-size:11px}
+.economy-table{font-size:12px}
+.economy-table th{padding:8px 9px}
+.economy-table td{padding:10px 9px}
+.economy-table td:nth-child(2){font-weight:550;color:var(--text)}
+.economy-amount{text-align:right;font-variant-numeric:tabular-nums}
+.economy-storage{display:flex;align-items:flex-start;justify-content:space-between;gap:28px;padding-top:15px;margin-top:23px;border-top:1px solid var(--border)}
+.economy-storage code{display:block;margin-top:4px;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.economy-storage>div:last-child{max-width:520px}
+.economy-storage strong{font-size:12px;font-weight:600}
+.economy-storage p{margin-top:4px;color:var(--muted);font-size:11px;line-height:1.5}
+@media(max-width:760px){
+ .economy-header{align-items:flex-start;flex-direction:column;gap:6px}
+ .economy-overview{grid-template-columns:1fr;gap:20px}
+ .economy-primary strong{font-size:38px}
+ .economy-activity{gap:12px}
+ .economy-activity strong{font-size:19px}
+ .economy-activity span{font-size:10px}
+ .economy-actions{gap:14px}
+ .economy-storage{flex-direction:column;gap:11px}
+}
+
 `;
 
 

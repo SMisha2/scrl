@@ -141,8 +141,8 @@ function pageTokenMarket(res, user, url) {
     '<div class="grid grid-3">' +
       '<div class="card balance"><div class="muted small">Текущее соотношение балансов</div><div style="font-size:25px;font-weight:750">' + market.referenceRate.toFixed(6) + ' V-RUB</div><div class="muted small">весь V-RUB участников / ScRl в обращении</div></div>' +
       '<div class="card"><div class="muted small">Целевой курс</div><div style="font-size:25px;font-weight:750">' + market.targetRate.toFixed(4) + ' V-RUB</div><div class="muted small">используется для лимита выпуска</div></div>' +
-      '<div class="card"><div class="muted small">Последняя цена сделки</div><div style="font-size:25px;font-weight:750">' + market.marketPrice.toFixed(6) + ' V-RUB</div><div class="muted small">' + (market.lastTradeAt ? new Date(market.lastTradeAt).toLocaleString('ru-RU') : 'Сделок нет · по соотношению балансов') + '</div></div>' +
-      '<div class="card"><div class="muted small">Средняя цена за 7 дней</div><div style="font-size:22px;font-weight:700">' + market.vwapPrice.toFixed(6) + ' V-RUB</div></div>' +
+      '<div class="card"><div class="muted small">Рыночная цена, VWAP за 7 дней</div><div style="font-size:25px;font-weight:750">' + market.marketPrice.toFixed(6) + ' V-RUB</div><div class="muted small">' + (market.marketTradeCount ? money(market.marketTradeCount) + ' сделок в расчёте' : 'Сделок нет. Используется целевой курс') + '</div></div>' +
+      '<div class="card"><div class="muted small">Последняя сделка</div><div style="font-size:22px;font-weight:700">' + (market.lastTradePrice === null ? 'Нет сделок' : market.lastTradePrice.toFixed(6) + ' V-RUB') + '</div></div>' +
       '<div class="card"><div class="muted small">V-RUB участников</div><div style="font-size:22px;font-weight:700">' + money(market.virtualRubleSupply) + '</div></div>' +
       '<div class="card"><div class="muted small">Максимум ScRl при целевом курсе</div><div style="font-size:22px;font-weight:700">' + money(market.maxSupportedScRl) + '</div></div>' +
       '<div class="card"><div class="muted small">ScRl в обращении</div><div style="font-size:22px;font-weight:700">' + money(market.circulatingScRl) + '</div></div>' +
@@ -159,7 +159,7 @@ function pageTokenMarket(res, user, url) {
       '<form method="POST" action="/admin/market/settings" class="grid grid-2"><div><label>Целевой курс, V-RUB за 1 ScRl</label><input name="target_rate" type="number" min="0.0001" max="100" step="0.0001" value="' + market.targetRate.toFixed(4) + '" required></div>' +
       '<div style="display:flex;align-items:end"><button class="btn btn-primary" type="submit">Сохранить целевой курс</button></div></form></section>' +
     '<section class="card"><div class="row-between"><h2>Свечной график рыночной цены</h2><span class="muted small">Почасовые свечи · до 14 дней</span></div>' +
-      '<p class="muted small">Свечи показывают цену последней исполненной сделки. VWAP за 7 дней: ' + market.vwapPrice.toFixed(6) + ' V-RUB. Если сделок нет, курс берётся из текущего соотношения балансов. Это виртуальная котировка, не реальные рубли.</p>' +
+      '<p class="muted small">Свечи показывают рыночную цену по VWAP за последние 7 дней. Последняя отдельная сделка: ' + market.vwapPrice.toFixed(6) + ' V-RUB. Если сделок нет, курс берётся из текущего соотношения балансов. Это виртуальная котировка, не реальные рубли.</p>' +
       '<div class="mt-1">' + candlestickSvg(market.candles) + '</div>' +
     '</section>' +
     '<section class="card"><h2>Последние сделки</h2>' +
@@ -168,8 +168,8 @@ function pageTokenMarket(res, user, url) {
     '<section class="card"><h2>Правила экономики</h2>' +
       '<p><b>Текущее соотношение = все V-RUB участников ÷ все ScRl в обращении.</b></p>' +
       '<p class="muted small mt-1">Оно пересчитывается при изменении балансов и общей массы валют, даже если биржевых сделок не было.</p>' +
-      '<p class="mt-1"><b>Последняя рыночная цена = цена последнего завершённого обмена.</b></p>' +
-      '<p class="muted small mt-1">VWAP за 7 дней. Это отдельная средняя, она не заменяет последнюю цену.</p>' +
+      '<p class="mt-1"><b>Рыночная цена = VWAP исполненных обменов за последние 7 дней.</b></p>' +
+      '<p class="muted small mt-1">Цена последней отдельной сделки показывается выше и может отличаться от VWAP.</p>' +
       '<p class="muted small mt-1">Для продажи ScRl учитываются токены, выданные покупателю после комиссии; для продажи V-RUB учитываются ScRl, уплаченные покупателем.</p>' +
       '<p class="mt-1"><b>Максимум обеспеченного ScRl = V-RUB в кошельках участников ÷ целевой курс.</b></p>' +
       '<p class="muted small mt-1">В обращении учитываются доступные и заблокированные ScRl учеников. Системный резерв не считается выпущенным токеном, а сожжённые ScRl исключаются навсегда. Новые начисления из резерва останавливаются, если превысят обеспеченный лимит.</p>' +

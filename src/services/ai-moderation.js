@@ -50,8 +50,8 @@ function sanitizeModerationInput(value) {
     .replace(/\b(?:https?:\/\/|www\.)\S+/giu, '[LINK]')
     .replace(/(?:\+?\d[\d\s().-]{7,}\d)/gu, '[PHONE]')
     .replace(/\b(?:\d[ -]?){13,19}\b/gu, '[NUMBER]')
-    .replace(/\b(?:паспорт|снилс|инн|номер карты|банковская карта)\s*[:№]?\s*[^\n,;]*/giu, '[PERSONAL_DATA]')
-    .replace(/\b(?:мой адрес|живу по адресу|адрес:|улица|ул\.|квартира|кв\.)\s*[:№]?\s*[^\n,;]*/giu, '[PERSONAL_DATA]')
+    .replace(/(?<![\p{L}\p{N}_])(?:паспорт|снилс|инн|номер\s+карты|банковская\s+карта)(?![\p{L}\p{N}_])\s*[:№]?\s*[^\n,;]*/giu, '[PERSONAL_DATA]')
+    .replace(/(?<![\p{L}\p{N}_])(?:мой\s+адрес|живу\s+по\s+адресу|адрес|улица|ул\.?|проспект|пр-т|переулок|пер\.?|квартира|кв\.?)(?![\p{L}\p{N}_])\s*[:№]?\s*[^\n;]*/giu, '[PERSONAL_DATA]')
     .replace(/@[\p{L}\p{N}_.-]{2,}/gu, '[MENTION]');
 }
 

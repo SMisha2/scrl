@@ -1,10 +1,11 @@
 const crypto = require('node:crypto');
-const { WEEKLY_LIMIT } = require('../config');
+const { WEEKLY_LIMIT, DATA_FILE } = require('../config');
 const { state, account, balance, systemAccount, recordTx, save } = require('../store');
 const { ageStatus } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
+const { getTokenMarketStats } = require('../services/token-market');
 function pageTeacher(res, user, url) {
   if (user.role !== 'teacher') return redirect(res, '/');
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -76,47 +77,127 @@ function handleIssue(res, user, params) {
 
 function pageAdmin(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
-  const totalIssued = state.transactions
-    .filter(t => ['signup_bonus', 'credit_teacher', 'credit_admin'].includes(t.kind))
-    .reduce((s, t) => s + (t.payload.amount || 0), 0);
-  const circulating = state.accounts
-    .filter(a => a.user_id && (a.kind === 'available' || a.kind === 'held'))
-    .reduce((s, a) => s + a.balance, 0);
-  const held = state.accounts.filter(a => a.user_id && a.kind === 'held').reduce((s, a) => s + a.balance, 0);
-  const burned = systemAccount('burn').balance;
-  const reserve = systemAccount('reserve').balance;
-  const totalUsers = state.users.length;
-  const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-  const activeUsers = new Set(state.transactions.filter(t => t.created_at > weekAgo && t.initiator_id).map(t => t.initiator_id)).size;
-  const tx24h = state.transactions.filter(t => t.created_at > new Date(Date.now() - 24 * 3600 * 1000).toISOString()).length;
-  const recentTx = state.transactions.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 15).map(t => {
-    const init = state.users.find(u => u.id === t.initiator_id);
-    return `<tr><td class="muted small">${new Date(t.created_at).toLocaleString('ru-RU')}</td>
-      <td>${esc(t.kind)}</td><td>${esc(init ? init.full_name : 'system')}</td>
-      <td class="muted small">${esc(JSON.stringify(t.payload))}</td></tr>`;
-  }).join('');
-  const m = (label, value, accent) => `<div class="card ${accent ? 'balance' : ''}">
-    <div class="muted small">${label}</div>
-    <div class="metric"><div class="value">${value.toLocaleString('ru-RU')}</div></div></div>`;
-  sendHtml(res, layout('Монитор', user, `
-    ${flashBox(url)}
-    <h1>Economy Monitor</h1>
-    <div class="grid grid-4">
-      ${m('Total Issued', totalIssued)}
-      ${m('Circulating', circulating)}
-      ${m('Held (escrow)', held)}
-      ${m('Total Burned', burned, true)}
-      ${m('Reserve', reserve)}
-      ${m('Users', totalUsers)}
-      ${m('Active (7d)', activeUsers)}
-      ${m('Tx (24h)', tx24h)}
-    </div>
-    <div class="mt-2 row"><a href="/admin/users" class="btn btn-primary">Пользователи →</a><a href="/admin/moderation" class="btn btn-ghost">Модерация →</a><a href="/admin/ai" class="btn btn-ghost">AI-помощник →</a><a href="/admin/financial" class="btn btn-ghost">Финансы →</a></div>
-    <div class="card mt-2"><h2>Последние транзакции</h2>
-      <table><thead><tr><th>Дата</th><th>Тип</th><th>Инициатор</th><th>Payload</th></tr></thead><tbody>${recentTx}</tbody></table>
-    </div>`));
-}
 
+  const students = state.users.filter(person => person.role === 'student');
+  const studentIds = new Set(students.map(person => person.id));
+  const market = getTokenMarketStats();
+  const circulating = market.circulatingScRl;
+  const held = state.accounts
+    .filter(item => studentIds.has(item.user_id) && item.kind === 'held')
+    .reduce((sum, item) => sum + Math.max(0, Number(item.balance) || 0), 0);
+  const available = Math.max(0, circulating - held);
+  const burnAccount = systemAccount('burn');
+  const reserveAccount = systemAccount('reserve');
+  const burned = Math.max(0, Number(burnAccount && burnAccount.balance) || 0);
+  const reserve = Math.max(0, Number(reserveAccount && reserveAccount.balance) || 0);
+  const money = value => Math.max(0, Number(value) || 0).toLocaleString('ru-RU');
+  const totalIssued = state.transactions
+    .filter(tx => ['signup_bonus', 'credit_teacher', 'credit_admin'].includes(tx.kind))
+    .reduce((sum, tx) => sum + Math.max(0, Number(tx.payload && tx.payload.amount) || 0), 0);
+
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const activeStudents = new Set(
+    state.transactions
+      .filter(tx => tx.created_at > weekAgo && studentIds.has(tx.initiator_id))
+      .map(tx => tx.initiator_id)
+  ).size;
+  const transactions24h = state.transactions.filter(tx => tx.created_at > dayAgo).length;
+
+  const labels = {
+    signup_bonus: 'Стартовый бонус',
+    credit_teacher: 'Начисление учителя',
+    credit_admin: 'Начисление школы',
+    debit_admin: 'Списание школой',
+    transfer: 'Перевод',
+    deal_escrow: 'Резерв по сделке',
+    deal_settlement: 'Оплата за помощь',
+    deal_escrow_refund: 'Возврат оплаты',
+    deal_dispute_refund: 'Возврат после спора',
+    deal_dispute_release: 'Выплата после спора',
+    exchange_hold: 'Заявка на обмен',
+    exchange_vrub_hold: 'Заявка на обмен V-RUB',
+    exchange_cancel: 'Отмена заявки',
+    exchange_vrub_cancel: 'Возврат заявки V-RUB',
+    exchange_trade: 'Обмен на бирже',
+    exchange_trade_vrub: 'Обмен V-RUB',
+    burn_commission: 'Комиссия сожжена'
+  };
+  const recentTx = state.transactions
+    .slice()
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .slice(0, 15)
+    .map(tx => {
+      const initiator = state.users.find(person => person.id === tx.initiator_id);
+      const payload = tx.payload && typeof tx.payload === 'object' ? tx.payload : {};
+      const rawAmount = payload.amount ?? payload.price ?? payload.amountScRl ??
+        payload.amount_scrl ?? payload.sc_rl_amount ?? payload.scrlAmount ?? 0;
+      const amount = Number(rawAmount);
+      const unit = tx.kind === 'exchange_trade_vrub' ? 'V-RUB' : 'ScRl';
+      const amountText = Number.isFinite(amount) && amount > 0
+        ? money(amount) + ' ' + unit
+        : 'Не указана';
+      return '<tr>' +
+        '<td class="muted small">' + esc(tx.created_at ? new Date(tx.created_at).toLocaleString('ru-RU') : 'Не указано') + '</td>' +
+        '<td>' + esc(labels[tx.kind] || 'Операция') + '</td>' +
+        '<td>' + esc(initiator ? initiator.full_name : 'Система') + '</td>' +
+        '<td class="economy-amount">' + esc(amountText) + '</td>' +
+      '</tr>';
+    }).join('');
+
+  const dataDirConfigured = Boolean(process.env.SCRL_DATA_DIR && process.env.SCRL_DATA_DIR.trim());
+  const storageTitle = dataDirConfigured ? 'Каталог задан' : 'Обычный каталог приложения';
+  const storageNote = dataDirConfigured
+    ? 'Проверьте, что Render Disk смонтирован именно в этот путь.'
+    : 'На Render этот файл пропадает при новом деплое. Для постоянного хранения нужен Render Disk и переменная SCRL_DATA_DIR.';
+
+  sendHtml(res, layout('Экономика ScRl', user, flashBox(url) +
+    '<header class="economy-header">' +
+      '<div><h1>Экономика ScRl</h1><p>Состояние счетов и последние операции.</p></div>' +
+      '<div class="economy-updated">Обновлено ' + new Date().toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '</div>' +
+    '</header>' +
+    '<section class="economy-overview" aria-label="Состояние экономики">' +
+      '<div class="economy-primary">' +
+        '<span class="economy-label">ScRl в обращении</span>' +
+        '<strong>' + money(circulating) + '</strong>' +
+        '<span class="economy-unit">ScRl</span>' +
+        '<p>' + money(held) + ' ScRl заблокировано у участников</p>' +
+      '</div>' +
+      '<dl class="economy-facts">' +
+        '<div><dt>Доступно ученикам</dt><dd>' + money(available) + ' ScRl</dd></div>' +
+        '<div><dt>Всего начислено</dt><dd>' + money(totalIssued) + ' ScRl</dd></div>' +
+        '<div><dt>Системный резерв</dt><dd>' + money(reserve) + ' ScRl</dd></div>' +
+        '<div><dt>Сожжено</dt><dd>' + money(burned) + ' ScRl</dd></div>' +
+        '<div><dt>V-RUB у учеников</dt><dd>' + money(market.virtualRubleSupply) + '</dd></div>' +
+        '<div><dt>Целевой курс</dt><dd>1 ScRl = ' + Number(market.targetRate).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' V-RUB</dd></div>' +
+        '<div><dt>Текущее соотношение</dt><dd>' + Number(market.referenceRate).toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) + ' V-RUB</dd></div>' +
+      '</dl>' +
+    '</section>' +
+    '<section class="economy-activity" aria-label="Активность">' +
+      '<div><strong>' + money(state.users.length) + '</strong><span>Пользователей</span></div>' +
+      '<div><strong>' + money(activeStudents) + '</strong><span>Учеников с операциями за 7 дней</span></div>' +
+      '<div><strong>' + money(transactions24h) + '</strong><span>Операций за сутки</span></div>' +
+    '</section>' +
+    '<nav class="economy-actions" aria-label="Разделы администратора">' +
+      '<a href="/admin/users">Пользователи</a>' +
+      '<a href="/admin/impact">Пульс лицея</a>' +
+      '<a href="/admin/market">Курс ScRl</a>' +
+      '<a href="/admin/moderation">Модерация</a>' +
+      '<a href="/admin/ai">AI-помощник</a>' +
+      '<a href="/admin/financial">Финансы</a>' +
+    '</nav>' +
+    '<section class="economy-transactions">' +
+      '<div class="economy-section-heading"><h2>Последние операции</h2><span>15 последних записей</span></div>' +
+      (recentTx
+        ? '<table class="economy-table"><thead><tr><th>Время</th><th>Операция</th><th>Участник</th><th>Сумма</th></tr></thead><tbody>' + recentTx + '</tbody></table>'
+        : '<p class="muted">Операций пока нет.</p>') +
+    '</section>' +
+    '<section class="economy-storage">' +
+      '<div><span class="economy-label">Файл данных</span><code>' + esc(DATA_FILE) + '</code></div>' +
+      '<div><strong>' + esc(storageTitle) + '</strong><p>' + esc(storageNote) + '</p></div>' +
+    '</section>'
+  ));
+}
 
 function pageAdminUsers(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');

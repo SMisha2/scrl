@@ -102,7 +102,8 @@ test('new ScRl issuance is blocked when it exceeds the backed capacity', () => {
   state.accounts.find(account => account.id === 'a7').balance = 0;
   const { market } = loadMarketWithState(state);
   assert.equal(market.canIssueScRl(10000).allowed, true);
-  assert.equal(market.canIssueScRl(50000).allowed, false);
+  assert.equal(market.canIssueScRl(50000).allowed, true);
+  assert.equal(market.canIssueScRl(50001).allowed, false);
 });
 
 test('executed trades move the market price using seven-day volume-weighted price', () => {
@@ -139,7 +140,7 @@ test('executed trades move the market price using seven-day volume-weighted pric
 
 test('signup bonus preserves the original 5 V-RUB value at the current live ratio', () => {
   const state = createState();
-  state.accounts.find(account => account.kind === 'vrub').balance = 5000;
+  state.accounts.find(account => account.kind === 'vrub').balance = 4000;
   const { market } = loadMarketWithState(state);
   const rateAtRegistration = market.getTokenMarketStats().referenceRate;
   assert.equal(rateAtRegistration, 0.05);
@@ -176,7 +177,7 @@ test('signup bonus is capped by the remaining backed supply capacity', () => {
   const { market } = loadMarketWithState(state);
   // Existing ratio is 0.05; only 100 ScRl of backed issuance capacity remain.
   const rateAtRegistration = market.getTokenMarketStats().referenceRate;
-  assert.equal(rateAtRegistration, 4000 / 79900);
+  assert.equal(rateAtRegistration, Number((4000 / 79900).toFixed(6)));
   assert.equal(market.calculateSignupBonusScRl(rateAtRegistration), 99);
 });
 

@@ -43,8 +43,8 @@ test('finds active requests without an unanswered pending response and category 
   assert.equal(result.activeRequests, 3);
   assert.equal(result.unansweredRequests, 2);
   assert.deepEqual(result.categoryGaps, [
-    { category: 'Английский', requests: 1, offers: 0 },
-    { category: 'Математика', requests: 2, offers: 1 }
+    { category: 'Математика', requests: 2, offers: 1 },
+    { category: 'Английский', requests: 1, offers: 0 }
   ]);
 });
 
