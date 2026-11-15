@@ -37,7 +37,7 @@ function anonymizeUser(target, details) {
   target.deleted_at = details.now;
   target.deleted_by = details.actorId;
   target.delete_reason = reason;
-  target.role = 'deleted';
+  // Keep the original role for ledger and market accounting. deleted_at blocks access.
   target.email = 'deleted+' + target.id + '@deleted.invalid';
   target.full_name = 'Удалённый пользователь';
   target.class_name = null;
