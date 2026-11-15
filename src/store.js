@@ -127,6 +127,24 @@ function ensureCollections() {
     };
     changed = true;
   }
+  if (!state.demand_posts.length && !state.offer_posts.length) {
+    const ivan = state.users.find(u => u.email === 'ivan@scrl.demo');
+    const masha = state.users.find(u => u.email === 'masha@scrl.demo');
+    const now = new Date().toISOString();
+    if (ivan) state.demand_posts.push({
+      id: crypto.randomUUID(), user_id: ivan.id, title: 'Нужна помощь с основами Python',
+      description: 'Хочу разобраться с функциями и списками. Нужны объяснения и небольшой разбор примеров.',
+      category: 'Программирование', price_mode: 'negotiable', price: 0,
+      status: 'active', is_demo: true, created_at: now, updated_at: now
+    });
+    if (masha) state.offer_posts.push({
+      id: crypto.randomUUID(), user_id: masha.id, title: 'Помогу разговорным английским',
+      description: 'Практика разговорной речи и разбор школьных тем. Можно договориться о бесплатной встрече для знакомства.',
+      category: 'Языки', price_mode: 'negotiable', price: 0,
+      status: 'active', is_demo: true, created_at: now, updated_at: now
+    });
+    if (ivan || masha) changed = true;
+  }
   if (changed) save();
 }
 
