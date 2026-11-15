@@ -23,7 +23,7 @@ function pageRubWallet(res, user, url) {
       '<section class="card"><h2>Тестовая заявка на вывод</h2><p class="muted small">Создаёт тестовую заявку без блокировки токенов и без выплаты.</p><form method="POST" action="/wallet/rub/payout"><label>Сумма, ScRl</label><input name="amount" type="number" min="1" required><button class="btn btn-ghost">Создать тестовую заявку</button></form></section></div>'
     : '<div class="alert alert-info">Платёжный модуль не подключён. Реальные пополнения и выплаты недоступны.</div>';
   const banner = mode === 'sandbox'
-    ? '<div class="alert alert-info"><b>Тестовый режим — реальные деньги не переводятся.</b> Платёжный партнёр не подключён, записи не изменяют баланс ScRl.</div>'
+    ? '<div class="alert alert-info"><b>Тестовый режим. Реальные деньги не переводятся.</b> Платёжный партнёр не подключён, записи не изменяют баланс ScRl.</div>'
     : '<div class="alert alert-info"><b>Платёжный модуль отключён.</b> Это не рублёвый кошелёк; ScRl учитывается отдельно от RUB.</div>';
   sendHtml(res, layout('RUB / Платежи', user, flashBox(url) + '<div class="row-between"><div><h1>RUB · Пополнение и вывод</h1><p class="muted">Отдельный контур операций с платёжным партнёром</p></div><a class="btn btn-ghost btn-sm" href="/wallet">К кошельку ScRl</a></div>' +
     banner + '<div class="card"><div class="row-between"><span>Режим</span><b>' + mode.toUpperCase() + '</b></div><p class="muted small mt-1">Предварительный расчётный курс и комиссии настраиваются сервером. Показ курса не является обещанием выкупа.</p></div>' +
@@ -128,7 +128,7 @@ function pageTokenMarket(res, user, url) {
     const buyer = state.users.find(person => person.id === item.buyer_id);
     const seller = state.users.find(person => person.id === item.seller_id);
     return '<tr><td>' + new Date(item.created_at).toLocaleString('ru-RU') + '</td>' +
-      '<td>' + esc(buyer ? buyer.full_name : '—') + '</td><td>' + esc(seller ? seller.full_name : '—') + '</td>' +
+      '<td>' + esc(buyer ? buyer.full_name : 'Не указано') + '</td><td>' + esc(seller ? seller.full_name : 'Не указано') + '</td>' +
       '<td>' + Number(item.amount_scrl).toLocaleString('ru-RU') + ' ScRl</td>' +
       '<td>' + Number(item.amount_vrub).toLocaleString('ru-RU') + ' V-RUB</td>' +
       '<td>' + price.toFixed(4) + '</td><td>' + Number(item.fee_scrl || 0).toLocaleString('ru-RU') + '</td></tr>';
@@ -169,12 +169,12 @@ function pageTokenMarket(res, user, url) {
       '<p><b>Текущее соотношение = все V-RUB участников ÷ все ScRl в обращении.</b></p>' +
       '<p class="muted small mt-1">Оно пересчитывается при изменении балансов и общей массы валют, даже если биржевых сделок не было.</p>' +
       '<p class="mt-1"><b>Последняя рыночная цена = цена последнего завершённого обмена.</b></p>' +
-      '<p class="muted small mt-1">VWAP за 7 дней — отдельная средняя, она не заменяет последнюю цену.</p>' +
-      '<p class="muted small mt-1">Для продажи ScRl учитываются токены, выданные покупателю после комиссии; для продажи V-RUB — ScRl, уплаченные покупателем.</p>' +
+      '<p class="muted small mt-1">VWAP за 7 дней. Это отдельная средняя, она не заменяет последнюю цену.</p>' +
+      '<p class="muted small mt-1">Для продажи ScRl учитываются токены, выданные покупателю после комиссии; для продажи V-RUB учитываются ScRl, уплаченные покупателем.</p>' +
       '<p class="mt-1"><b>Максимум обеспеченного ScRl = V-RUB в кошельках участников ÷ целевой курс.</b></p>' +
       '<p class="muted small mt-1">В обращении учитываются доступные и заблокированные ScRl учеников. Системный резерв не считается выпущенным токеном, а сожжённые ScRl исключаются навсегда. Новые начисления из резерва останавливаются, если превысят обеспеченный лимит.</p>' +
       '<p class="muted small mt-1">Комиссия при покрытии ниже 100%: 0,5% + (1 − покрытие) × 20 процентных пунктов, максимум 20%. При покрытии от 100% до 200% она плавно снижается до 0%.</p>' +
-      '<div class="alert alert-info mt-1"><b>Реальное покрытие RUB: 0.</b> V-RUB — виртуальная единица проекта. Платёжный партнёр, реальные пополнения и выплаты не подключены; график не обещает обмен на настоящие деньги.</div>' +
+      '<div class="alert alert-info mt-1"><b>Реальное покрытие RUB: 0.</b> V-RUB является виртуальной единицей проекта. Платёжный партнёр, реальные пополнения и выплаты не подключены; график не обещает обмен на настоящие деньги.</div>' +
     '</section>'
   ));
 }
@@ -206,7 +206,7 @@ function pageFinancialOps(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
   const rows = state.money_operations.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(o => {
     const owner = state.users.find(u => u.id === o.user_id);
-    return '<tr><td>' + esc(o.id.slice(0, 8)) + '</td><td>' + esc(owner ? owner.full_name : '—') + '</td><td>' + esc(o.type) + '</td><td>' + o.sc_rl_amount + ' ScRl</td><td>' + o.rub_amount + ' RUB</td><td>' + esc(o.status) + '</td><td>' + esc(o.mode) + '</td></tr>';
+    return '<tr><td>' + esc(o.id.slice(0, 8)) + '</td><td>' + esc(owner ? owner.full_name : 'Не указано') + '</td><td>' + esc(o.type) + '</td><td>' + o.sc_rl_amount + ' ScRl</td><td>' + o.rub_amount + ' RUB</td><td>' + esc(o.status) + '</td><td>' + esc(o.mode) + '</td></tr>';
   }).join('');
   const mode = paymentMode();
   sendHtml(res, layout('Financial Operations', user, flashBox(url) + '<div class="row-between"><div><h1>Financial Operations</h1><p class="muted">Журнал денежных операций партнёра, не рублёвые балансы пользователей.</p></div><a class="btn btn-ghost btn-sm" href="/admin">Назад</a></div>' +
