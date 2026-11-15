@@ -94,8 +94,8 @@ function pageModeration(res, user, url) {
     const meta = reportMeta(report);
     const post = meta.targetType === 'post' ? findPost(meta.postKind, meta.postId) : null;
     const listing = meta.targetType === 'listing' ? state.listings.find(x => x.id === meta.listingId) : null;
-    if (!post && !listing) return false;
-    return !query || [report.reason, post?.title, post?.description, listing?.title, listing?.description]
+    if (!['post', 'listing'].includes(meta.targetType)) return false;
+    return !query || [report.reason, post?.title, post?.description, listing?.title, listing?.description, 'объект не найден']
       .filter(Boolean).join(' ').toLowerCase().includes(query);
   }).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
   const reportHtml = reports.map(report => {
