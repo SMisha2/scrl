@@ -356,7 +356,7 @@ function handleDealCancel(res, user, params) {
   const ledger = dealLedgerState(deal);
   const price = Number(deal.price || 0);
   if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/deals?error=bad');
-  if (ledger.settlement && ledger.settlement.kind !== 'deal_escrow_refund') {
+  if (ledger.settlement && !['deal_escrow_refund', 'deal_dispute_refund'].includes(ledger.settlement.kind)) {
     return redirect(res, '/deals?error=already_settled');
   }
   if (price > 0 && !ledger.settlement) {
