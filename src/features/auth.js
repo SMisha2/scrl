@@ -66,8 +66,7 @@ function pageLogin(res, user, url, staffOnly = false) {
     : '<p class="text-center mt-2"><a href="/staff/login">Вход для учителей и сотрудников</a></p>';
   sendHtml(res, layout(title, null,
     '<div class="card" style="max-width:440px;margin:40px auto"><h1>' +
-    (staffOnly ? 'Вход для учителей' : 'Вход в ScRl') + '</h1>' +
-    '<p class="muted" style="margin-bottom:16px">ScRl · школьная платформа</p>' + flashBox(url) +
+    (staffOnly ? 'Вход для учителей' : 'Вход в ScRl') + '</h1>' + flashBox(url) +
     '<form method="POST" action="' + action + '"><label>Email</label><input name="email" type="email" required autocomplete="username" placeholder="name@example.com">' +
     '<label>Пароль</label><input name="password" type="password" required autocomplete="current-password">' +
     '<button type="submit" class="btn btn-primary btn-block">Войти</button></form>' +

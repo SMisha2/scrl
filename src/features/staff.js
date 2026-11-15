@@ -348,7 +348,7 @@ function pageAdminUsers(res, user, url) {
 
   sendHtml(res, layout('Пользователи', user,
     flashBox(url) +
-    '<header class="admin-users-header"><div><h1>Участники</h1><p class="muted">Роли, классы и доступ к ScRl.</p></div>' +
+    '<header class="admin-users-header"><div><h1>Участники</h1></div>' +
     '<a href="/admin" class="btn btn-ghost btn-sm">К экономике</a></header>' +
     tabs +
     (showDeleted ? '' :

@@ -128,7 +128,7 @@ function pageAuctions(res, user, url) {
     </form></div>` : '';
   sendHtml(res, layout('Аукционы', user, `
     ${flashBox(url)}
-    <h1>Аукционы ScRl</h1><p class="muted">Ставки используют только внутренние ScRl. Денежные ставки и денежные призы отключены.</p>
+    <div class="row-between"><h1>Аукционы ScRl</h1><span class="badge badge-accent">Ставки в ScRl</span></div>
     ${createForm}
     <h2 class="mt-2">Активные</h2>
     ${items || '<p class="muted">Активных аукционов нет</p>'}

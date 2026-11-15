@@ -19,14 +19,14 @@ function pageRubWallet(res, user, url) {
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const rows = items.map(o => '<tr><td>' + new Date(o.created_at).toLocaleString('ru-RU') + '</td><td>' + esc(o.type) + '</td><td>' + o.rub_amount.toLocaleString('ru-RU') + ' RUB</td><td>' + esc(o.status) + '</td><td><span class="badge badge-accent">SANDBOX</span></td></tr>').join('');
   const sandboxForm = mode === 'sandbox'
-    ? '<div class="grid grid-2"><section class="card"><h2>Тестовое пополнение</h2><p class="muted small">Создаёт только тестовую запись. ScRl не начисляются, реальный платёж не выполняется.</p><form method="POST" action="/wallet/rub/topup"><label>Сумма, RUB</label><input name="amount" type="number" min="1" max="10000" required><button class="btn btn-primary">Создать тестовый платёж</button></form></section>' +
-      '<section class="card"><h2>Тестовая заявка на вывод</h2><p class="muted small">Создаёт тестовую заявку без блокировки токенов и без выплаты.</p><form method="POST" action="/wallet/rub/payout"><label>Сумма, ScRl</label><input name="amount" type="number" min="1" required><button class="btn btn-ghost">Создать тестовую заявку</button></form></section></div>'
+    ? '<div class="grid grid-2"><section class="card"><h2>Тестовое пополнение</h2><form method="POST" action="/wallet/rub/topup"><label>Сумма, RUB</label><input name="amount" type="number" min="1" max="10000" required><button class="btn btn-primary">Создать тестовый платёж</button></form></section>' +
+      '<section class="card"><h2>Тестовая заявка на вывод</h2><form method="POST" action="/wallet/rub/payout"><label>Сумма, ScRl</label><input name="amount" type="number" min="1" required><button class="btn btn-ghost">Создать тестовую заявку</button></form></section></div>'
     : '<div class="alert alert-info">Платёжный модуль не подключён. Реальные пополнения и выплаты недоступны.</div>';
   const banner = mode === 'sandbox'
     ? '<div class="alert alert-info"><b>Тестовый режим. Реальные деньги не переводятся.</b> Платёжный партнёр не подключён, записи не изменяют баланс ScRl.</div>'
     : '<div class="alert alert-info"><b>Платёжный модуль отключён.</b> Это не рублёвый кошелёк; ScRl учитывается отдельно от RUB.</div>';
-  sendHtml(res, layout('RUB / Платежи', user, flashBox(url) + '<div class="row-between"><div><h1>RUB · Пополнение и вывод</h1><p class="muted">Отдельный контур операций с платёжным партнёром</p></div><a class="btn btn-ghost btn-sm" href="/wallet">К кошельку ScRl</a></div>' +
-    banner + '<div class="card"><div class="row-between"><span>Режим</span><b>' + mode.toUpperCase() + '</b></div><p class="muted small mt-1">Предварительный расчётный курс и комиссии настраиваются сервером. Показ курса не является обещанием выкупа.</p></div>' +
+  sendHtml(res, layout('RUB / Платежи', user, flashBox(url) + '<div class="row-between"><div><h1>RUB · Пополнение и вывод</h1></div><a class="btn btn-ghost btn-sm" href="/wallet">К кошельку ScRl</a></div>' +
+    banner + '<div class="card"><div class="row-between"><span>Режим</span><b>' + mode.toUpperCase() + '</b></div></div>' +
     sandboxForm + '<section class="card"><h2>История операций</h2>' + (rows ? '<table><thead><tr><th>Дата</th><th>Операция</th><th>Сумма</th><th>Статус</th><th>Среда</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="muted">Операций пока нет.</p>') + '</section>'));
 }
 
@@ -137,7 +137,7 @@ function pageTokenMarket(res, user, url) {
   const coveragePercent = market.coverageRatio * 100;
   const coverageStatus = market.coverageRatio >= 1 ? 'Покрытие достаточное' : 'ScRl выше лимита';
   sendHtml(res, layout('Курс ScRl', user, flashBox(url) +
-    '<div class="row-between"><div><h1>Экономика ScRl</h1><p class="muted">Рыночная цена, лимит обеспеченного выпуска и динамическое сжигание.</p></div><a href="/admin" class="btn btn-ghost btn-sm">← Монитор</a></div>' +
+    '<div class="row-between"><div><h1>Экономика ScRl</h1></div><a href="/admin" class="btn btn-ghost btn-sm">← Монитор</a></div>' +
     '<div class="grid grid-3">' +
       '<div class="card balance"><div class="muted small">Текущее соотношение балансов</div><div style="font-size:25px;font-weight:750">' + market.referenceRate.toFixed(6) + ' V-RUB</div><div class="muted small">весь V-RUB участников / ScRl в обращении</div></div>' +
       '<div class="card"><div class="muted small">Целевой курс</div><div style="font-size:25px;font-weight:750">' + market.targetRate.toFixed(4) + ' V-RUB</div><div class="muted small">используется для лимита выпуска</div></div>' +
@@ -152,20 +152,20 @@ function pageTokenMarket(res, user, url) {
     '</div>' +
     '<section class="card mt-2"><div class="row-between"><h2>Покрытие выпуска</h2><b>' + coveragePercent.toFixed(1) + '% · ' + coverageStatus + '</b></div>' +
       '<div class="progress"><div class="progress-bar" style="width:' + Math.max(0, Math.min(100, coveragePercent)) + '%"></div></div>' +
-      '<p class="muted small mt-1">Оставшаяся ёмкость выпуска: ' + money(market.remainingCapacityScRl) + ' ScRl. Если обращение выше лимита, новые начисления блокируются, а комиссия биржи повышается и сжигает часть ScRl при обмене.</p>' +
+      '<p class="muted small mt-1">Остаток лимита: ' + money(market.remainingCapacityScRl) + ' ScRl.</p>' +
       '<div class="grid grid-2 mt-1"><div><div class="muted small">Текущая комиссия сжигания</div><h2>' + (market.burnFeeRate * 100).toFixed(2) + '%</h2></div><div><div class="muted small">Объём сделок за 7 дней</div><h2>' + money(market.marketVolumeScRl) + ' ScRl / ' + money(market.marketVolumeVrub) + ' V-RUB</h2></div></div>' +
     '</section>' +
-    '<section class="card"><h2>Настройка целевого курса</h2><p class="muted small">Целевой курс задаёт лимит обеспеченного выпуска. Рыночная цена продолжает определяться совершёнными сделками.</p>' +
+    '<section class="card"><h2>Настройка целевого курса</h2>' +
       '<form method="POST" action="/admin/market/settings" class="grid grid-2"><div><label>Целевой курс, V-RUB за 1 ScRl</label><input name="target_rate" type="number" min="0.0001" max="100" step="0.0001" value="' + market.targetRate.toFixed(4) + '" required></div>' +
       '<div style="display:flex;align-items:end"><button class="btn btn-primary" type="submit">Сохранить целевой курс</button></div></form></section>' +
     '<section class="card"><div class="row-between"><h2>Свечной график рыночной цены</h2><span class="muted small">Почасовые свечи · до 14 дней</span></div>' +
-      '<p class="muted small">Свечи показывают рыночную цену по VWAP за последние 7 дней. Последняя отдельная сделка: ' + market.vwapPrice.toFixed(6) + ' V-RUB. Если сделок нет, курс берётся из текущего соотношения балансов. Это виртуальная котировка, не реальные рубли.</p>' +
+      '' +
       '<div class="mt-1">' + candlestickSvg(market.candles) + '</div>' +
     '</section>' +
     '<section class="card"><h2>Последние сделки</h2>' +
       (trades ? '<table><thead><tr><th>Дата</th><th>Покупатель</th><th>Продавец</th><th>Объём</th><th>V-RUB</th><th>Цена</th><th>Сожжено</th></tr></thead><tbody>' + trades + '</tbody></table>' : '<p class="muted">Пока нет совершённых сделок. Первая цена будет взята из целевого курса.</p>') +
     '</section>' +
-    '<section class="card"><h2>Правила экономики</h2>' +
+    '<details class="card"><summary>Правила экономики</summary>' +
       '<p><b>Текущее соотношение = все V-RUB участников ÷ все ScRl в обращении.</b></p>' +
       '<p class="muted small mt-1">Оно пересчитывается при изменении балансов и общей массы валют, даже если биржевых сделок не было.</p>' +
       '<p class="mt-1"><b>Рыночная цена = VWAP исполненных обменов за последние 7 дней.</b></p>' +
@@ -175,7 +175,7 @@ function pageTokenMarket(res, user, url) {
       '<p class="muted small mt-1">В обращении учитываются доступные и заблокированные ScRl учеников. Системный резерв не считается выпущенным токеном, а сожжённые ScRl исключаются навсегда. Новые начисления из резерва останавливаются, если превысят обеспеченный лимит.</p>' +
       '<p class="muted small mt-1">Комиссия при покрытии ниже 100%: 0,5% + (1 − покрытие) × 20 процентных пунктов, максимум 20%. При покрытии от 100% до 200% она плавно снижается до 0%.</p>' +
       '<div class="alert alert-info mt-1"><b>Реальное покрытие RUB: 0.</b> V-RUB является виртуальной единицей проекта. Платёжный партнёр, реальные пополнения и выплаты не подключены; график не обещает обмен на настоящие деньги.</div>' +
-    '</section>'
+    '</details>'
   ));
 }
 
@@ -209,7 +209,7 @@ function pageFinancialOps(res, user, url) {
     return '<tr><td>' + esc(o.id.slice(0, 8)) + '</td><td>' + esc(owner ? owner.full_name : 'Не указано') + '</td><td>' + esc(o.type) + '</td><td>' + o.sc_rl_amount + ' ScRl</td><td>' + o.rub_amount + ' RUB</td><td>' + esc(o.status) + '</td><td>' + esc(o.mode) + '</td></tr>';
   }).join('');
   const mode = paymentMode();
-  sendHtml(res, layout('Financial Operations', user, flashBox(url) + '<div class="row-between"><div><h1>Financial Operations</h1><p class="muted">Журнал денежных операций партнёра, не рублёвые балансы пользователей.</p></div><a class="btn btn-ghost btn-sm" href="/admin">Назад</a></div>' +
+  sendHtml(res, layout('Financial Operations', user, flashBox(url) + '<div class="row-between"><div><h1>Financial Operations</h1></div><a class="btn btn-ghost btn-sm" href="/admin">Назад</a></div>' +
     '<div class="alert alert-info">Текущий режим: <b>' + mode.toUpperCase() + '</b>. Live недоступен из приложения. Администратор не может вручную подтвердить оплату или выплату.</div>' +
     '<div class="grid grid-3"><div class="card"><span class="muted small">Операций</span><h2>' + state.money_operations.length + '</h2></div><div class="card"><span class="muted small">Sandbox</span><h2>' + state.money_operations.filter(o => o.mode === 'sandbox').length + '</h2></div><div class="card"><span class="muted small">Реальные операции</span><h2>0</h2></div></div>' +
     '<section class="card"><h2>Журнал</h2>' + (rows ? '<table><thead><tr><th>ID</th><th>Участник</th><th>Тип</th><th>ScRl</th><th>RUB</th><th>Статус</th><th>Режим</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="muted">Операций пока нет.</p>') + '</section>'));
