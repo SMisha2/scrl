@@ -1,88 +1,247 @@
+const crypto = require('node:crypto');
 const { state, systemAccount, save } = require('../store');
 
 const CANDLE_INTERVAL_MS = 60 * 60 * 1000;
 const MAX_CANDLES = 24 * 14;
+const TRADE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const BASE_BURN_FEE = 0.005;
+const MAX_BURN_FEE = 0.20;
+const TARGET_RATE_DEFAULT = 0.05;
 
-function getTokenMarketStats() {
+function safeNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getTargetRate() {
+  if (!state.settings || typeof state.settings !== 'object') state.settings = {};
+  const configured = safeNumber(state.settings.token_target_rate, TARGET_RATE_DEFAULT);
+  return configured > 0 ? configured : TARGET_RATE_DEFAULT;
+}
+
+function getRecentTrades(nowMs = Date.now()) {
+  if (!Array.isArray(state.token_market_trades)) state.token_market_trades = [];
+  const cutoff = nowMs - TRADE_WINDOW_MS;
+  return state.token_market_trades
+    .filter(trade => {
+      const timestamp = Date.parse(trade.created_at || '');
+      return Number.isFinite(timestamp) && timestamp >= cutoff &&
+        safeNumber(trade.amount_scrl) > 0 && safeNumber(trade.amount_vrub) > 0;
+    })
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .slice(-2000);
+}
+
+function calculateMarketPrice(trades, targetRate) {
+  if (!trades.length) return { price: targetRate, volumeScRl: 0, volumeVrub: 0, tradeCount: 0, source: 'target_fallback' };
+  const volumeScRl = trades.reduce((sum, trade) => sum + safeNumber(trade.amount_scrl), 0);
+  const volumeVrub = trades.reduce((sum, trade) => sum + safeNumber(trade.amount_vrub), 0);
+  if (volumeScRl <= 0 || volumeVrub <= 0) {
+    return { price: targetRate, volumeScRl: 0, volumeVrub: 0, tradeCount: 0, source: 'target_fallback' };
+  }
+  return {
+    price: volumeVrub / volumeScRl,
+    volumeScRl,
+    volumeVrub,
+    tradeCount: trades.length,
+    source: 'seven_day_vwap'
+  };
+}
+
+function getBurnFeeRate(coverageRatio) {
+  const coverage = Math.max(0, safeNumber(coverageRatio, 0));
+  if (coverage < 1) {
+    const deficit = 1 - coverage;
+    return Math.min(MAX_BURN_FEE, BASE_BURN_FEE + deficit * 0.20);
+  }
+  // When the supply is fully covered, the fee gradually falls to zero.
+  return Math.max(0, BASE_BURN_FEE - Math.max(0, coverage - 1) * BASE_BURN_FEE);
+}
+
+function getTokenMarketStats(now = new Date()) {
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  const safeNow = Number.isFinite(nowMs) ? nowMs : Date.now();
   const studentIds = new Set(state.users.filter(user => user.role === 'student').map(user => user.id));
   const userAccounts = state.accounts.filter(account => studentIds.has(account.user_id));
+
+  // Only participant-held ScRl is in circulation. The system reserve is
+  // inventory that can be issued later; burned tokens are permanently removed.
   const circulatingScRl = userAccounts
     .filter(account => account.kind === 'available' || account.kind === 'held')
-    .reduce((sum, account) => sum + Math.max(0, Number(account.balance) || 0), 0);
+    .reduce((sum, account) => sum + Math.max(0, safeNumber(account.balance)), 0);
   const virtualRubleSupply = userAccounts
     .filter(account => account.kind === 'vrub' || account.kind === 'vrub_held')
-    .reduce((sum, account) => sum + Math.max(0, Number(account.balance) || 0), 0);
-  const reserveScRl = Math.max(0, Number((systemAccount('reserve') || {}).balance) || 0);
-  const burnedScRl = Math.max(0, Number((systemAccount('burn') || {}).balance) || 0);
-  const totalIssuedScRl = circulatingScRl + reserveScRl + burnedScRl;
-  const referenceRate = totalIssuedScRl > 0
-    ? virtualRubleSupply / totalIssuedScRl
-    : 0;
+    .reduce((sum, account) => sum + Math.max(0, safeNumber(account.balance)), 0);
+  const reserveScRl = Math.max(0, safeNumber((systemAccount('reserve') || {}).balance));
+  const burnedScRl = Math.max(0, safeNumber((systemAccount('burn') || {}).balance));
+  const targetRate = getTargetRate();
+
+  // At targetRate V-RUB per ScRl, this is the largest circulating supply
+  // that the current V-RUB mass can support.
+  const maxSupportedScRl = targetRate > 0 ? Math.floor(virtualRubleSupply / targetRate) : 0;
+  const backedRate = circulatingScRl > 0 ? virtualRubleSupply / circulatingScRl : targetRate;
+  const totalSupplyScRl = circulatingScRl + reserveScRl;
+  const totalCreatedScRl = totalSupplyScRl + burnedScRl;
+  const coverageRatio = circulatingScRl > 0
+    ? virtualRubleSupply / (circulatingScRl * targetRate)
+    : (virtualRubleSupply > 0 ? 1 : 0);
+  const excessScRl = Math.max(0, circulatingScRl - maxSupportedScRl);
+  const remainingCapacityScRl = Math.max(0, maxSupportedScRl - circulatingScRl);
+
+  const trades = getRecentTrades(safeNow);
+  const market = calculateMarketPrice(trades, targetRate);
+  const burnFeeRate = getBurnFeeRate(coverageRatio);
 
   return {
     circulatingScRl,
     reserveScRl,
     burnedScRl,
-    totalIssuedScRl,
+    totalSupplyScRl,
+    totalCreatedScRl,
     virtualRubleSupply,
-    referenceRate: Number(referenceRate.toFixed(6)),
+    targetRate: Number(targetRate.toFixed(6)),
+    maxSupportedScRl,
+    remainingCapacityScRl,
+    excessScRl,
+    backedRate: Number(backedRate.toFixed(6)),
+    coverageRatio: Number(coverageRatio.toFixed(6)),
+    marketPrice: Number(market.price.toFixed(6)),
+    referenceRate: Number(market.price.toFixed(6)),
+    marketPriceSource: market.source,
+    marketVolumeScRl: market.volumeScRl,
+    marketVolumeVrub: market.volumeVrub,
+    marketTradeCount: market.tradeCount,
+    burnFeeRate: Number(burnFeeRate.toFixed(6)),
     realRubAvailable: 0,
-    formula: 'V-RUB в кошельках участников / весь выпуск ScRl (участники + резерв + сожжённые токены)'
+    formula: 'Рыночная цена = объём V-RUB по сделкам за 7 дней / объём ScRl по тем же сделкам',
+    backingFormula: 'Максимум ScRl в обращении = V-RUB всех учеников / целевой курс'
   };
 }
 
-function recordTokenRateCandle(now = new Date()) {
-  const stats = getTokenMarketStats();
-  const timestamp = now instanceof Date ? now.getTime() : new Date(now).getTime();
+function calculateBurnCommission(grossScRl, stats = getTokenMarketStats()) {
+  const amount = Math.floor(safeNumber(grossScRl));
+  if (amount <= 1) return 0;
+  return Math.min(amount - 1, Math.floor(amount * stats.burnFeeRate));
+}
+
+function canIssueScRl(amount, stats = getTokenMarketStats()) {
+  const value = Math.floor(safeNumber(amount));
+  if (value <= 0) return { allowed: false, reason: 'invalid_amount', capacityLeft: stats.remainingCapacityScRl };
+  return {
+    allowed: stats.circulatingScRl + value <= stats.maxSupportedScRl,
+    reason: stats.circulatingScRl + value <= stats.maxSupportedScRl ? null : 'backing_limit',
+    capacityLeft: stats.remainingCapacityScRl,
+    requested: value,
+    maximum: stats.maxSupportedScRl
+  };
+}
+
+function updateCandle(price, now = new Date(), volumeScRl = 0) {
+  const timestamp = now instanceof Date ? now.getTime() : Date.parse(now);
   const safeTimestamp = Number.isFinite(timestamp) ? timestamp : Date.now();
   const bucketStart = Math.floor(safeTimestamp / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS;
   const bucket = new Date(bucketStart).toISOString();
-  const price = stats.referenceRate;
   let candle = state.token_rate_candles.find(item => item.bucket === bucket);
-  let changed = false;
+
+  // Earlier candles stored a balance ratio, not an executed market price.
+  if (candle && candle.model !== 'market_vwap_v1') {
+    state.token_rate_candles = state.token_rate_candles.filter(item => item.bucket !== bucket);
+    candle = null;
+  }
 
   if (!candle) {
     candle = {
       bucket,
+      model: 'market_vwap_v1',
       open: price,
       high: price,
       low: price,
       close: price,
+      volume_scrl: Math.max(0, volumeScRl),
       samples: 1,
       updated_at: new Date(safeTimestamp).toISOString()
     };
     state.token_rate_candles.push(candle);
-    changed = true;
   } else {
-    const high = Math.max(Number(candle.high) || price, price);
-    const low = Math.min(Number(candle.low) || price, price);
-    const close = price;
-    if (high !== candle.high || low !== candle.low || close !== candle.close) changed = true;
-    candle.high = high;
-    candle.low = low;
-    candle.close = close;
-    candle.samples = (Number(candle.samples) || 0) + 1;
-    changed = true;
+    candle.high = Math.max(safeNumber(candle.high, price), price);
+    candle.low = Math.min(safeNumber(candle.low, price), price);
+    candle.close = price;
+    candle.volume_scrl = safeNumber(candle.volume_scrl) + Math.max(0, volumeScRl);
+    candle.samples = safeNumber(candle.samples) + 1;
     candle.updated_at = new Date(safeTimestamp).toISOString();
   }
 
   state.token_rate_candles.sort((a, b) => a.bucket.localeCompare(b.bucket));
   if (state.token_rate_candles.length > MAX_CANDLES) {
     state.token_rate_candles.splice(0, state.token_rate_candles.length - MAX_CANDLES);
-    changed = true;
   }
-  const previousRate = Number(state.settings.token_exchange_rate);
-  if (!Number.isFinite(previousRate) || previousRate !== price) {
-    state.settings.token_exchange_rate = price;
-    state.settings.token_exchange_rate_version = (Number(state.settings.token_exchange_rate_version) || 0) + 1;
-    changed = true;
-  }
-  if (changed) save();
+  return true;
+}
 
+function persistCurrentPrice(price) {
+  const previousRate = safeNumber(state.settings.token_exchange_rate, -1);
+  if (previousRate === price) return false;
+  state.settings.token_exchange_rate = price;
+  state.settings.token_exchange_rate_version = (safeNumber(state.settings.token_exchange_rate_version) || 0) + 1;
+  return true;
+}
+
+function recordTokenRateCandle(now = new Date()) {
+  const stats = getTokenMarketStats(now);
+  const candleChanged = updateCandle(stats.marketPrice, now, 0);
+  const rateChanged = persistCurrentPrice(stats.marketPrice);
+  if (candleChanged || rateChanged) save();
   return {
     ...stats,
-    candles: state.token_rate_candles.slice(-MAX_CANDLES)
+    candles: state.token_rate_candles.filter(item => item.model === 'market_vwap_v1').slice(-MAX_CANDLES)
   };
 }
 
-module.exports = { getTokenMarketStats, recordTokenRateCandle };
+function recordTokenMarketTrade(data) {
+  if (!data || !data.orderId) throw new Error('A market trade needs an order ID');
+  if (!Array.isArray(state.token_market_trades)) state.token_market_trades = [];
+  const existing = state.token_market_trades.find(item => item.order_id === data.orderId);
+  if (existing) return getTokenMarketStats();
+
+  const amountScRl = Math.floor(safeNumber(data.amountScRl));
+  const amountVrub = Math.floor(safeNumber(data.amountVrub));
+  if (amountScRl <= 0 || amountVrub <= 0) throw new Error('A market trade needs positive ScRl and V-RUB volume');
+
+  const now = data.createdAt ? new Date(data.createdAt) : new Date();
+  const createdAt = Number.isFinite(now.getTime()) ? now.toISOString() : new Date().toISOString();
+  state.token_market_trades.push({
+    id: crypto.randomUUID(),
+    order_id: String(data.orderId),
+    side: data.side === 'sell_vrub' ? 'sell_vrub' : 'sell_scrl',
+    buyer_id: data.buyerId || null,
+    seller_id: data.sellerId || null,
+    amount_scrl: amountScRl,
+    amount_vrub: amountVrub,
+    fee_scrl: Math.floor(safeNumber(data.feeScRl)),
+    created_at: createdAt
+  });
+
+  const cutoff = Date.parse(createdAt) - 30 * 24 * 60 * 60 * 1000;
+  state.token_market_trades = state.token_market_trades
+    .filter(item => Date.parse(item.created_at) >= cutoff)
+    .slice(-2000);
+
+  const stats = getTokenMarketStats(createdAt);
+  updateCandle(stats.marketPrice, createdAt, amountScRl);
+  persistCurrentPrice(stats.marketPrice);
+  save();
+
+  return {
+    ...stats,
+    candles: state.token_rate_candles.filter(item => item.model === 'market_vwap_v1').slice(-MAX_CANDLES)
+  };
+}
+
+module.exports = {
+  getTokenMarketStats,
+  recordTokenRateCandle,
+  recordTokenMarketTrade,
+  calculateBurnCommission,
+  canIssueScRl,
+  getBurnFeeRate
+};
