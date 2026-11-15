@@ -25,25 +25,32 @@ function pageApp(res, user, url) {
         <span class="muted">${esc(tx ? tx.kind : 'Операция')}</span>
         <b class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${e.amount} ScRl</b></li>`;
     }).join('');
-  const activeOrders = state.orders
-    .filter(o => (o.buyer_id === user.id || o.seller_id === user.id) && ['awaiting_delivery', 'awaiting_confirmation'].includes(o.status))
-    .slice(0, 5)
-    .map(o => `<li class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">
-      <span>${o.buyer_id === user.id ? 'Покупка' : 'Продажа'}</span>
-      <span class="muted">${o.price} ScRl</span>
-      <span class="badge badge-muted">${esc(o.status)}</span></li>`).join('');
+  const activeLabels = { accepted: 'Принята', in_progress: 'В работе', awaiting_confirmation: 'Ждёт подтверждения' };
+  const activeOrders = (state.deals || [])
+    .filter(deal => (deal.buyer_id === user.id || deal.seller_id === user.id) && ['accepted', 'in_progress', 'awaiting_confirmation'].includes(deal.status))
+    .sort((x, y) => String(y.updated_at || y.created_at).localeCompare(String(x.updated_at || x.created_at)))
+    .slice(0, 4)
+    .map(deal => {
+      const collection = deal.post_kind === 'demand' ? state.demand_posts : state.offer_posts;
+      const post = collection.find(item => item.id === deal.post_id);
+      const otherId = deal.buyer_id === user.id ? deal.seller_id : deal.buyer_id;
+      const other = state.users.find(item => item.id === otherId);
+      return '<li class="home-list-row"><a href="/deal?id=' + encodeURIComponent(deal.id) + '">' +
+        esc(post ? post.title : 'Договорённость') + '</a><span class="muted small">' +
+        esc(activeLabels[deal.status] || 'Активна') + ' · ' + esc(other ? other.full_name : 'Участник') + '</span></li>';
+    }).join('');
 
   sendHtml(res, layout('Главная', user, `
     ${flashBox(url)}
     <div class="row-between" style="margin-bottom:16px;align-items:end">
-      <div><h1 style="margin-bottom:2px">Главная</h1><p class="muted">Всё важное — в одном месте</p></div>
+      <div><h1 style="margin-bottom:2px">Главная</h1><p class="muted">Попроси о помощи или поделись тем, что умеешь.</p></div>
       <span class="badge badge-primary-soft">Личный кабинет</span>
     </div>
-    <section class="card balance" style="padding:24px">
+    <section class="card balance home-wallet">
       <div class="row-between">
         <div>
           <div class="muted small">Ваш кошелёк · доступно</div>
-          <div style="font-size:34px;font-weight:750;letter-spacing:-1px;margin:5px 0">🪙 ${av.toLocaleString('ru-RU')} ScRl</div>
+          <div style="font-size:34px;font-weight:750;letter-spacing:-1px;margin:5px 0">${av.toLocaleString('ru-RU')} ScRl</div>
           <div class="muted small">В резерве сделок: ${hd.toLocaleString('ru-RU')} ScRl</div>
         </div>
         <a class="btn btn-primary" href="/wallet">Открыть кошелёк <span aria-hidden="true">→</span></a>
@@ -56,10 +63,10 @@ function pageApp(res, user, url) {
     </section>
     ${!tradeable ? `<div class="alert alert-info">Покупки и аукционы доступны с 14 лет. Вы можете просматривать доску и получать токены.</div>` : ''}
     <div class="grid grid-4 mt-2">
-      <a href="/board" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">01 · Сообщество</span><h2 class="mt-1">Общая доска</h2><p class="muted small">Ищу помощь и предлагаю свои навыки</p></a>
-      <a href="/activity" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">02 · Работа</span><h2 class="mt-1">Активность</h2><p class="muted small">Отклики, сделки и сообщения</p></a>
-      <a href="/exchange" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">03 · Обмен</span><h2 class="mt-1">Биржа</h2><p class="muted small">ScRl и виртуальные рубли</p></a>
-      <a href="/auctions" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">04 · События</span><h2 class="mt-1">Аукционы</h2><p class="muted small">Внутренние ставки ScRl</p></a>
+      <a href="/board" class="hub-link"><span class="hub-kicker">Сообщество</span><h2>Доска помощи</h2><p class="muted small">Ищу помощь и предлагаю свои навыки</p></a>
+      <a href="/activity" class="hub-link"><span class="hub-kicker">Договорённости</span><h2>Моя активность</h2><p class="muted small">Отклики, сделки и сообщения</p></a>
+      <a href="/exchange" class="hub-link"><span class="hub-kicker">Кошелёк</span><h2>Биржа ScRl</h2><p class="muted small">ScRl и виртуальные рубли</p></a>
+      <a href="/auctions" class="hub-link"><span class="hub-kicker">События</span><h2>Школьные аукционы</h2><p class="muted small">Внутренние ставки ScRl</p></a>
     </div>
     <div class="grid grid-2 mt-2">
       <section class="card">
