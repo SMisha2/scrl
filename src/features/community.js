@@ -14,7 +14,7 @@ function notify(userId, type, title, message, href) {
 }
 
 function findPost(postId, type) {
-  const source = type === 'demand' ? state.demands : state.offers;
+  const source = type === 'demand' ? state.demand_posts : state.offer_posts;
   return source.find(x => x.id === postId);
 }
 
@@ -46,7 +46,7 @@ function postCard(post, type, user, showApply) {
 function pageBoard(res, user, url, type) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const isDemand = type === 'demand';
-  const data = isDemand ? state.demands : state.offers;
+  const data = isDemand ? state.demand_posts : state.offer_posts;
   const q = (url.searchParams.get('q') || '').trim().toLowerCase();
   const category = (url.searchParams.get('category') || '').trim();
   const items = data.filter(x => x.status === 'active' &&
@@ -76,8 +76,8 @@ function pageMarketplace(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
   const type = url.searchParams.get('type') === 'demand' ? 'demand' : url.searchParams.get('type') === 'offer' ? 'offer' : 'all';
   const q = (url.searchParams.get('q') || '').trim().toLowerCase();
-  const all = (type === 'all' || type === 'demand' ? state.demands.filter(x => x.status === 'active').map(x => ({...x, post_type:'demand'})) : [])
-    .concat(type === 'all' || type === 'offer' ? state.offers.filter(x => x.status === 'active').map(x => ({...x, post_type:'offer'})) : [])
+  const all = (type === 'all' || type === 'demand' ? state.demand_posts.filter(x => x.status === 'active').map(x => ({...x, post_type:'demand'})) : [])
+    .concat(type === 'all' || type === 'offer' ? state.offer_posts.filter(x => x.status === 'active').map(x => ({...x, post_type:'offer'})) : [])
     .filter(x => !q || (x.title + ' ' + x.description).toLowerCase().includes(q))
     .sort((a,b) => b.created_at.localeCompare(a.created_at));
   const cards = all.map(x => postCard(x, x.post_type, user, true)).join('');
@@ -102,7 +102,7 @@ function handleCreatePost(res, user, params, type) {
     price: priceMode === 'fixed' ? price : 0, status: 'active',
     created_at: new Date().toISOString(), expires_at: new Date(Date.now()+30*86400000).toISOString()
   };
-  (type === 'demand' ? state.demands : state.offers).push(item);
+  (type === 'demand' ? state.demand_posts : state.offer_posts).push(item);
   save();
   redirect(res, '/' + type + '?msg=created');
 }
@@ -266,7 +266,7 @@ function pageNotifications(res,user) {
 
 function pageProfile(res,user,url) {
   const completed=state.deals.filter(x=>x.status==='completed'&&(x.buyer_id===user.id||x.seller_id===user.id)).length;
-  const posts=state.demands.concat(state.offers).filter(x=>x.user_id===user.id&&x.status==='active').length;
+  const posts=state.demand_posts.concat(state.offer_posts).filter(x=>x.user_id===user.id&&x.status==='active').length;
   const reviews=state.reviews.filter(x=>x.reviewed_user_id===user.id);
   const average=reviews.length?(reviews.reduce((s,x)=>s+x.rating,0)/reviews.length).toFixed(1):'—';
   const reviewHtml=reviews.slice(-10).reverse().map(x=>'<div class="card"><b>'+x.rating+'/5</b><p>'+esc(x.comment||'Без комментария')+'</p></div>').join('');
