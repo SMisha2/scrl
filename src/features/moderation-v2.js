@@ -69,8 +69,11 @@ function pageModeration(res, user, url) {
     const seller = deal ? state.users.find(x => x.id === deal.seller_id) : null;
     let buttons = '';
     if (item.kind === 'post' || item.kind === 'listing') {
-      buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="approve"><button class="btn btn-primary btn-sm">Одобрить</button></form>' +
-        '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="reject"><button class="btn btn-danger btn-sm">Отклонить</button></form>';
+      const target = post || listing;
+      buttons = target && target.status === 'pending'
+        ? '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="approve"><button class="btn btn-primary btn-sm">Одобрить</button></form>' +
+          '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="reject"><button class="btn btn-danger btn-sm">Отклонить</button></form>'
+        : '<span class="badge badge-muted">Объект уже изменён — действие недоступно</span>';
     } else if (item.kind === 'deal' && deal?.status === 'disputed') {
       const paid = Number(deal.price || 0) > 0;
       buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl заказчику' : 'Отменить сделку') + '</button></form>' +
@@ -268,6 +271,17 @@ function handleReportAction(res, user, params) {
       duplicate.reviewed_by = user.id;
       duplicate.reviewed_at = now;
       duplicate.decision = 'target_removed';
+    }
+    for (const relatedCase of state.moderation_cases.filter(entry =>
+      entry.status === 'open' && (
+        (meta.targetType === 'post' && entry.kind === 'post' && entry.target_id === meta.postId && entry.post_kind === meta.postKind) ||
+        (meta.targetType === 'listing' && entry.kind === 'listing' && entry.target_id === meta.listingId)
+      )
+    )) {
+      relatedCase.status = 'resolved';
+      relatedCase.decision = 'removed_after_report';
+      relatedCase.resolved_by = user.id;
+      relatedCase.resolved_at = now;
     }
   } else {
     report.status = decision === 'remove' ? 'action_taken' : 'dismissed';
