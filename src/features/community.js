@@ -354,6 +354,61 @@ function toggleFavorite(res, user, params) {
   return redirect(res, kind === 'demand' ? '/demand' : '/offers');
 }
 
+function handlePostReport(res, user, params) {
+  if (user.role !== 'student') return redirect(res, '/');
+  const postId = params.get('post_id');
+  const kind = params.get('post_kind') === 'offer' ? 'offer' : 'demand';
+  const collection = kind === 'demand' ? state.demand_posts : state.offer_posts;
+  const post = collection.find(p => p.id === postId && p.status === 'active');
+  if (!post || post.user_id === user.id) return redirect(res, kind === 'demand' ? '/demand?error=bad' : '/offers?error=bad');
+  const existing = state.reports.find(r => r.target_id === post.id && r.reporter_id === user.id && r.status === 'open');
+  if (existing) return redirect(res, '/notifications?msg=reported');
+  const report = {
+    id: crypto.randomUUID(), target_type: 'post', target_id: post.id,
+    post_type: kind, reporter_id: user.id, reason: 'Жалоба на публикацию',
+    status: 'open', created_at: new Date().toISOString()
+  };
+  state.reports.unshift(report);
+  state.moderation_cases.unshift({
+    id: crypto.randomUUID(), kind: 'report', target_id: post.id, post_kind: kind,
+    status: 'open', reason: report.reason, reporter_id: user.id,
+    created_at: new Date().toISOString()
+  });
+  state.users.filter(u => u.role === 'admin').forEach(admin =>
+    notify(admin.id, 'moderation', 'Новая жалоба на публикацию', 'Поступила жалоба на публикацию: ' + post.title, '/admin/moderation')
+  );
+  save();
+  return redirect(res, '/notifications?msg=reported');
+}
+
+function handleClosePost(res, user, params) {
+  if (user.role !== 'student') return redirect(res, '/');
+  const kind = params.get('post_kind') === 'offer' ? 'offer' : 'demand';
+  const collection = kind === 'demand' ? state.demand_posts : state.offer_posts;
+  const post = collection.find(p => p.id === params.get('post_id') && p.user_id === user.id && p.status === 'active');
+  if (!post) return redirect(res, kind === 'demand' ? '/demand?error=bad' : '/offers?error=bad');
+  post.status = 'closed';
+  post.updated_at = new Date().toISOString();
+  save();
+  return redirect(res, kind === 'demand' ? '/demand?msg=closed' : '/offers?msg=closed');
+}
+
+function pageFavorites(res, user) {
+  if (user.role !== 'student') return redirect(res, '/');
+  const posts = state.favorites.filter(f => f.user_id === user.id).map(f => {
+    const post = (f.post_kind === 'offer' ? state.offer_posts : state.demand_posts).find(p => p.id === f.post_id);
+    return post ? { favorite: f, post } : null;
+  }).filter(Boolean);
+  const rows = posts.map(x => {
+    const href = x.favorite.post_kind === 'offer' ? '/offers' : '/demand';
+    return '<a class="card" style="display:block;color:inherit" href="' + href + '"><div class="row-between"><b>' +
+      esc(x.post.title) + '</b><span class="badge badge-primary-soft">' + (x.favorite.post_kind === 'offer' ? 'Предложение' : 'Спрос') +
+      '</span></div><p class="muted small mt-1">' + esc(x.post.category || 'Другое') + ' · ' + esc(moneyLabel(x.post)) +
+      '</p><p class="mt-1">' + esc(x.post.description) + '</p></a>';
+  }).join('');
+  sendHtml(res, layout('Избранное', user, '<h1>Избранное</h1>' + (rows || '<div class="card"><p class="muted">Сохранённых публикаций пока нет.</p><a class="btn btn-primary mt-1" href="/demand">Перейти к доскам</a></div>')));
+}
+
 function pageNotifications(res, user, url) {
   const items = state.notifications.filter(n => n.user_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const rows = items.map(n => '<a class="card" style="display:block;color:inherit;opacity:' + (n.is_read ? '.72' : '1') + '" href="' + esc(n.href || '/') + '"><div class="row-between"><b>' + esc(n.title) + '</b><span class="muted small">' + new Date(n.created_at).toLocaleString('ru-RU') + '</span></div><p class="mt-1">' + esc(n.body) + '</p>' + (!n.is_read ? '<span class="badge badge-accent">Новое</span>' : '') + '</a>').join('');
@@ -370,6 +425,6 @@ module.exports = {
   pageDemand, pageOffers, handleCreateDemand, handleCreateOffer, handleRespond,
   pageApplications, handleApplicationAction, pageDeals, pageDeal, handleDealMessage,
   handleDealDeliver, handleDealConfirm, handleDealDispute, handleDealReview,
-  pageProfile, toggleFavorite, pageNotifications, markNotificationsRead,
-  unreadCount
+  pageProfile, toggleFavorite, pageFavorites, handlePostReport, handleClosePost,
+  pageNotifications, markNotificationsRead, unreadCount
 };
