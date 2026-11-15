@@ -49,10 +49,11 @@ function deadlineMarkup(value) {
 }
 
 function renderBoardPostForm(categories, initial = {}, errorMessage = '') {
-  const mode = PRICE_MODES[initial.price_mode] ? initial.price_mode : 'negotiable';
+  const defaultMode = initial.force_free ? 'free' : 'negotiable';
+  const mode = PRICE_MODES[initial.price_mode] ? initial.price_mode : defaultMode;
   const kind = initial.post_kind === 'offer' ? 'offer' : 'demand';
   const options = Object.entries(PRICE_MODES).map(([key, label]) =>
-    '<option value="' + key + '"' + (mode === key ? ' selected' : '') + '>' + label + '</option>'
+    '<option value="' + key + '"' + (mode === key ? ' selected' : '') + (initial.force_free && key !== 'free' ? ' disabled' : '') + '>' + label + '</option>'
   ).join('');
   const categoryOptions = categories.map(value => '<option value="' + esc(value) + '">').join('');
   const price = initial.price === undefined ? '' : String(initial.price);
@@ -206,7 +207,9 @@ function pageCommunity(res, user, url) {
     const moderation = post.status === 'pending' ? '<span class="badge badge-accent">На проверке</span>' : '';
     const responseForm = mine
       ? '<a class="btn btn-ghost btn-sm" href="/activity">Отклики (' + responses + ')</a>'
-      : renderResponseForm(post);
+      : (post.price_mode === 'free' || (canTrade(user) && canTrade(author))
+        ? renderResponseForm(post)
+        : '<p class="muted small">Платные условия и обмен доступны участникам с 14 лет.</p>');
     const reportForm = !mine
       ? '<details class="mt-1"><summary class="small muted" style="cursor:pointer">Пожаловаться</summary><form method="POST" action="/posts/report" class="mt-1">' +
         '<input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
@@ -223,7 +226,7 @@ function pageCommunity(res, user, url) {
       reportForm + '</div></article>';
   }).join('');
 
-  const form = renderBoardPostForm(categories);
+  const form = renderBoardPostForm(categories, { force_free: !canTrade(user), price_mode: canTrade(user) ? 'negotiable' : 'free' });
   const filters = '<section class="card"><form method="GET" action="/board"><div class="grid grid-3">' +
     '<div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div>' +
     '<div><label>Показывать</label><select name="kind"><option value="all"' + (kindFilter === 'all' ? ' selected' : '') + '>Всё вместе</option><option value="demand"' + (kindFilter === 'demand' ? ' selected' : '') + '>Мне нужно</option><option value="offer"' + (kindFilter === 'offer' ? ' selected' : '') + '>Я могу</option></select></div>' +
@@ -272,9 +275,14 @@ async function createPost(res, user, params, kind) {
     price_mode: mode,
     price: params.get('price') || '',
     price_max: params.get('price_max') || '',
-    deadline: deadlineInput
+    deadline: deadlineInput,
+    force_free: !canTrade(user)
   };
 
+  if (mode !== 'free' && !canTrade(user)) {
+    initial.price_mode = 'free';
+    return renderPostValidationError(res, user, initial, 'Платные публикации и обмен доступны с 14 лет. Выберите условие «Бесплатно».');
+  }
   if (!title || !description || !category) {
     return renderPostValidationError(res, user, initial, 'Заполните название, категорию и описание публикации.');
   }
