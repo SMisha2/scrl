@@ -195,8 +195,9 @@ function pageApplications(res, user, url) {
 
 function handleApplicationAction(res, user, params) {
   if (user.role !== 'student') return redirect(res, '/');
-  const app = state.applications.find(a => a.id === params.get('application_id'));
+  const app = state.applications.find(item => item.id === params.get('application_id'));
   if (!app || app.owner_id !== user.id || app.status !== 'pending') return redirect(res, '/applications?error=bad');
+
   if (params.get('decision') === 'decline') {
     app.status = 'declined';
     app.updated_at = new Date().toISOString();
@@ -204,45 +205,82 @@ function handleApplicationAction(res, user, params) {
     notify(app.applicant_id, 'application', 'Отклик отклонён', 'Автор публикации отклонил ваш отклик.', '/applications');
     return redirect(res, '/applications?msg=declined');
   }
-  const post = (app.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(p => p.id === app.post_id);
+
+  const post = (app.post_kind === 'demand' ? state.demand_posts : state.offer_posts)
+    .find(item => item.id === app.post_id);
   if (!post || post.status !== 'active') return redirect(res, '/applications?error=notfound');
-  const existingDeal = state.deals.find(deal => deal.post_id === post.id && deal.post_kind === app.post_kind && deal.status !== 'cancelled');
+  const existingDeal = state.deals.find(deal =>
+    deal.post_id === post.id && deal.post_kind === app.post_kind && deal.status !== 'cancelled'
+  );
   if (existingDeal) return redirect(res, '/applications?error=already_accepted');
+
   const buyerId = app.post_kind === 'demand' ? post.user_id : app.applicant_id;
   const sellerId = app.post_kind === 'demand' ? app.applicant_id : post.user_id;
-  const price = app.proposal_type === 'paid' ? app.proposed_price : 0;
-  const buyer = state.users.find(u => u.id === buyerId);
-  const seller = state.users.find(u => u.id === sellerId);
-  if (price > 0 && (!buyer || !seller || !canTrade(buyer) || !canTrade(seller))) return redirect(res, '/applications?error=age');
-  if (price > 0 && balance(buyerId, 'available') < price) return redirect(res, '/applications?error=insufficient');
+  const price = app.proposal_type === 'paid' ? Number(app.proposed_price) : 0;
+  const buyer = state.users.find(item => item.id === buyerId);
+  const seller = state.users.find(item => item.id === sellerId);
+  if (!buyer || !seller || (price > 0 && (!canTrade(buyer) || !canTrade(seller)))) {
+    return redirect(res, '/applications?error=age');
+  }
+  if (!Number.isSafeInteger(price) || price < 0 || price > 1000000) {
+    return redirect(res, '/applications?error=amount');
+  }
+  if (price > 0 && balance(buyerId, 'available') < price) {
+    return redirect(res, '/applications?error=insufficient');
+  }
+
+  const now = new Date().toISOString();
+  const commissionPercent = Math.min(100, Math.max(0, Number(state.settings.marketplace_commission_percent) || 0));
   const deal = {
     id: crypto.randomUUID(), post_id: post.id, post_kind: app.post_kind,
     application_id: app.id, buyer_id: buyerId, seller_id: sellerId,
     created_by: user.id, deal_type: app.proposal_type, price,
-    status: 'accepted', commission_percent: Number(state.settings.marketplace_commission_percent || 0),
-    created_at: new Date().toISOString(), delivered_at: null, completed_at: null
+    status: 'accepted', commission_percent: commissionPercent,
+    created_at: now, delivered_at: null, completed_at: null
   };
-  if (price > 0) {
-    recordTx('deal_escrow', buyerId, { dealId: deal.id, amount: price }, [
-      { accountId: account(buyerId, 'available').id, amount: -price, note: 'Резервирование сделки' },
-      { accountId: account(buyerId, 'held').id, amount: price, note: 'Escrow сделки ' + deal.id }
-    ]);
-  }
+  const previousApp = { status: app.status, deal_id: app.deal_id, updated_at: app.updated_at };
+  const previousPost = { status: post.status, updated_at: post.updated_at };
+  const systemMessage = {
+    id: crypto.randomUUID(), deal_id: deal.id, sender_id: user.id,
+    message: 'Условия приняты. Сделка создана.', created_at: now, system: true
+  };
+
   state.deals.unshift(deal);
   post.status = 'in_progress';
-  post.updated_at = new Date().toISOString();
+  post.updated_at = now;
   app.status = 'accepted';
   app.deal_id = deal.id;
-  app.updated_at = new Date().toISOString();
-  state.deal_messages.push({
-    id: crypto.randomUUID(), deal_id: deal.id, sender_id: user.id,
-    message: 'Условия приняты. Сделка создана.', created_at: new Date().toISOString(), system: true
-  });
-  save();
+  app.updated_at = now;
+  state.deal_messages.push(systemMessage);
+
+  try {
+    if (price > 0) {
+      recordTx('deal_escrow', buyerId, { dealId: deal.id, amount: price }, [
+        { accountId: account(buyerId, 'available').id, amount: -price, note: 'Резервирование сделки' },
+        { accountId: account(buyerId, 'held').id, amount: price, note: 'Escrow сделки ' + deal.id }
+      ]);
+    } else {
+      save();
+    }
+  } catch (error) {
+    state.deals = state.deals.filter(item => item.id !== deal.id);
+    state.deal_messages = state.deal_messages.filter(item => item.id !== systemMessage.id);
+    app.status = previousApp.status;
+    if (previousApp.deal_id === undefined) delete app.deal_id;
+    else app.deal_id = previousApp.deal_id;
+    app.updated_at = previousApp.updated_at;
+    post.status = previousPost.status;
+    post.updated_at = previousPost.updated_at;
+    save();
+    console.error('Deal creation failed:', error.message);
+    return redirect(res, '/applications?error=escrow');
+  }
+
   notify(app.applicant_id, 'deal', 'Отклик принят', 'Создана сделка. Откройте её, чтобы продолжить.', '/deal?id=' + deal.id);
   notify(post.user_id, 'deal', 'Сделка создана', 'Можно продолжить работу в переписке сделки.', '/deal?id=' + deal.id);
   return redirect(res, '/deal?id=' + deal.id);
 }
+
 
 function pageDeals(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
