@@ -9,7 +9,7 @@ function seedData() {
     listings: [], orders: [], auctions: [], bids: [], exchange_orders: [],
     demands: [], offers: [], applications: [], deals: [], notifications: [],
     favorites: [], reports: [], moderation_cases: [], ai_messages: [], deal_messages: [], reviews: [],
-    money_operations: [], audit_logs: []
+    money_operations: [], audit_logs: [], vrub_ledger_entries: []
   };
   const reserveId = crypto.randomUUID();
   const burnId = crypto.randomUUID();
@@ -115,7 +115,7 @@ function ensureCollections() {
     'funding_sources', 'funding_reserves', 'payment_intents', 'payout_requests',
     'provider_events', 'partner_settlements', 'refund_operations',
     'withdrawal_eligibility_checks', 'guardian_links', 'consent_records',
-    'financial_audit_logs', 'token_rate_candles'
+    'financial_audit_logs', 'token_rate_candles', 'vrub_ledger_entries'
   ];
   let changed = false;
   for (const name of collections) {
@@ -141,6 +141,34 @@ function ensureCollections() {
       changed = true;
     }
   }
+  if (state.settings.vrub_initial_grant_migrated !== true) {
+    for (const user of state.users.filter(item => item.role === 'student')) {
+      const vrub = account(user.id, 'vrub');
+      const hasHistory = state.entries.some(entry => entry.account_id === vrub.id);
+      const hasOpeningRecord = state.vrub_ledger_entries.some(entry =>
+        entry.user_id === user.id && ['initial_grant', 'opening_balance'].includes(entry.event_type)
+      );
+      if (!hasOpeningRecord) {
+        if (vrub.balance > 0) {
+          state.vrub_ledger_entries.push({
+            id: crypto.randomUUID(), user_id: user.id, event_type: 'opening_balance',
+            amount: vrub.balance, reason: 'Existing V-RUB balance preserved during migration',
+            created_at: new Date().toISOString()
+          });
+        } else if (!hasHistory) {
+          grantStartingVrub(user.id, 'migration');
+        } else {
+          state.vrub_ledger_entries.push({
+            id: crypto.randomUUID(), user_id: user.id, event_type: 'legacy_zero_balance',
+            amount: 0, reason: 'Existing V-RUB transaction history found; no second grant issued',
+            created_at: new Date().toISOString()
+          });
+        }
+      }
+    }
+    state.settings.vrub_initial_grant_migrated = true;
+    changed = true;
+  }
   if (!state.demand_posts.length && !state.offer_posts.length) {
     const ivan = state.users.find(u => u.email === 'ivan@scrl.demo');
     const masha = state.users.find(u => u.email === 'masha@scrl.demo');
@@ -163,6 +191,24 @@ function ensureCollections() {
 }
 
 ensureCollections();
+
+function grantStartingVrub(userId, reason = 'registration') {
+  const user = state.users.find(item => item.id === userId && item.role === 'student');
+  if (!user) return false;
+  if (!Array.isArray(state.vrub_ledger_entries)) state.vrub_ledger_entries = [];
+  if (state.vrub_ledger_entries.some(entry => entry.user_id === userId && entry.event_type === 'initial_grant')) {
+    return false;
+  }
+  const vrub = account(userId, 'vrub');
+  if (vrub.balance > 0 || state.entries.some(entry => entry.account_id === vrub.id)) return false;
+  const amount = 1000;
+  vrub.balance += amount;
+  state.vrub_ledger_entries.push({
+    id: crypto.randomUUID(), user_id: userId, event_type: 'initial_grant',
+    amount, reason, created_at: new Date().toISOString()
+  });
+  return true;
+}
 
 function account(userId, kind) {
   let a = state.accounts.find(x => x.user_id === userId && x.kind === kind);
@@ -498,4 +544,4 @@ function recordTx(kind, initiator, payload, entries) {
 
 rebuildTokenLedgerFromHistory();
 
-module.exports = { state, seedData, save, account, systemAccount, balance, recordTx, rebuildTokenLedgerFromHistory };
+module.exports = { state, seedData, save, account, systemAccount, balance, recordTx, rebuildTokenLedgerFromHistory, grantStartingVrub };
