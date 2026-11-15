@@ -61,7 +61,7 @@ const server = http.createServer(async (req, res) => {
 
     if (path === '/app' && method === 'GET') return pageApp(res, user, url);
     if (path === '/wallet' && method === 'GET') return pageWallet(res, user, url);
-    if (path === '/market' && method === 'GET') return pageMarket(res, user, url);
+    if (path === '/market' && method === 'GET') return redirect(res, '/board');
     if (path === '/market/create' && method === 'POST') return await handleCreateListing(res, user, params);
     if (path === '/market/delete' && method === 'POST') return handleDeleteListing(res, user, params);
     if (path === '/market/buy' && method === 'POST') return handleBuyListing(res, user, params);
@@ -87,7 +87,10 @@ const server = http.createServer(async (req, res) => {
     if (path === '/admin/block' && method === 'POST') return handleBlock(res, user, params);
 
     // Demand Board, Offer Board, applications and Deal Engine.
-    if (path === '/marketplace' && method === 'GET') return redirect(res, '/demand');
+    if (path === '/board' && method === 'GET') return community.pageCommunity(res, user, url);
+    if (path === '/board/create' && method === 'POST') return await community.handleCreateBoard(res, user, params);
+    if (path === '/activity' && method === 'GET') return community.pageApplications(res, user, url);
+    if (path === '/marketplace' && method === 'GET') return redirect(res, '/board');
     if (path === '/demand' && method === 'GET') return community.pageDemand(res, user, url);
     if ((path === '/offers' || path === '/offer') && method === 'GET') return community.pageOffers(res, user, url);
     if (path === '/demand/create' && method === 'POST') return await community.handleCreateDemand(res, user, params);
