@@ -171,12 +171,12 @@ function renderResponseForm(post) {
   const placeholder = isDemand
     ? 'Опишите, как вы поможете решить запрос автора.'
     : 'Опишите, какая именно помощь вам нужна и что требуется сделать.';
-  return '<form method="POST" action="/posts/respond" class="mt-1">' +
+  return '<details class="respond-panel"><summary>Откликнуться</summary><form method="POST" action="/posts/respond" class="respond-form">' +
     '<input type="hidden" name="post_id" value="' + esc(post.id) + '">' +
     '<input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
-    '<label>' + label + '</label><textarea name="message" rows="3" maxlength="700" required placeholder="' + placeholder + '"></textarea>' +
+    '<label>' + label + '</label><textarea name="message" rows="2" maxlength="700" required placeholder="' + placeholder + '"></textarea>' +
     priceInput +
-    '<button class="btn btn-primary btn-sm" type="submit">' + (isDemand ? 'Предложить помощь' : 'Запросить помощь') + '</button></form>';
+    '<button class="btn btn-primary btn-sm" type="submit">' + (isDemand ? 'Предложить помощь' : 'Запросить помощь') + '</button></form></details>';
 }
 
 function recommendedHelpOffers(user) {
@@ -214,53 +214,55 @@ function pageCommunity(res, user, url) {
     const mine = post.user_id === user.id;
     const responses = state.applications.filter(app => app.post_id === post.id && app.post_kind === post.post_kind).length;
     const favorite = state.favorites.some(item => item.user_id === user.id && item.post_id === post.id && item.post_kind === post.post_kind);
-    const kindLabel = post.post_kind === 'demand' ? 'Ищу помощь' : 'Предлагаю помощь';
-    const moderation = post.status === 'pending' ? '<span class="badge badge-accent">На проверке</span>' : '';
+    const kindLabel = post.post_kind === 'demand' ? 'Ищу помощь' : 'Могу помочь';
+    const moderation = post.status === 'pending' ? '<span class="post-status">На проверке</span>' : '';
     const responseForm = mine
-      ? '<a class="btn btn-ghost btn-sm" href="/activity">Отклики (' + responses + ')</a>'
+      ? '<a class="post-action-link" href="/activity">Отклики (' + responses + ')</a>'
       : (post.price_mode === 'free' || (canTrade(user) && canTrade(author))
         ? renderResponseForm(post)
-        : '<p class="muted small">Платные условия и обмен доступны участникам с 14 лет.</p>');
+        : '<span class="muted small">Платные условия доступны с 14 лет.</span>');
     const reportForm = !mine
-      ? '<details class="mt-1"><summary class="small muted" style="cursor:pointer">Пожаловаться</summary><form method="POST" action="/posts/report" class="mt-1">' +
+      ? '<details class="report-panel"><summary>Пожаловаться</summary><form method="POST" action="/posts/report" class="respond-form">' +
         '<input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
         '<label>Причина</label><select name="reason_code"><option value="unsafe">Опасная услуга или товар</option><option value="privacy">Личные данные</option><option value="harassment">Оскорбления или угрозы</option><option value="spam">Спам или обман</option><option value="other">Другое</option></select>' +
         '<textarea name="details" maxlength="300" rows="2" placeholder="Дополнительные детали"></textarea><button class="btn btn-ghost btn-sm">Отправить жалобу</button></form></details>'
       : '';
-    return '<article class="card board-post">'+
-      '<div class="row-between"><div class="row"><span class="badge badge-primary-soft">' + kindLabel + '</span><span class="badge badge-muted">' + esc(post.category || 'Другое') + '</span>' + moderation + '</div><span class="muted small">' + new Date(post.created_at).toLocaleDateString('ru-RU') + '</span></div>' +
-      '<h2 class="mt-1">' + esc(post.title) + '</h2><p>' + esc(post.description).replace(/\n/g, '<br>') + '</p>' +
-      '<div class="row-between mt-1"><b class="accent">' + esc(moneyLabel(post)) + '</b><span class="muted small">' + esc(author ? author.full_name : 'Участник') + (author && author.class_name ? ' · ' + esc(author.class_name) : '') + '</span></div>' +
-      (post.deadline ? '<p class="muted small mt-1">Выполнить до: ' + deadlineMarkup(post.deadline) + '</p>' : '') +
-      '<div class="row mt-2">' + responseForm +
-      '<form method="POST" action="/favorites/toggle"><input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '"><button class="btn btn-ghost btn-sm">' + (favorite ? '★ В избранном' : '☆ В избранное') + '</button></form>' +
-      reportForm + '</div></article>';
+    return '<article class="board-post">' +
+      '<div class="post-meta"><span>' + kindLabel + '</span><span>·</span><span>' + esc(post.category || 'Другое') + '</span>' + moderation +
+        '<time>' + new Date(post.created_at).toLocaleDateString('ru-RU') + '</time></div>' +
+      '<h2>' + esc(post.title) + '</h2><p>' + esc(post.description).replace(/\n/g, '<br>') + '</p>' +
+      '<div class="post-footer"><div><b>' + esc(moneyLabel(post)) + '</b><span class="muted small"> · ' +
+        esc(author ? author.full_name : 'Участник') + (author && author.class_name ? ' · ' + esc(author.class_name) : '') + '</span>' +
+        (post.deadline ? '<div class="muted small" style="margin-top:3px">До ' + deadlineMarkup(post.deadline) + '</div>' : '') +
+      '</div><div class="post-actions">' + responseForm +
+        '<form method="POST" action="/favorites/toggle"><input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
+        '<button class="link-button" type="submit">' + (favorite ? 'В избранном' : 'В избранное') + '</button></form>' +
+        reportForm + '</div></div></article>';
   }).join('');
 
   const form = renderBoardPostForm(categories, { force_free: !canTrade(user), price_mode: canTrade(user) ? 'negotiable' : 'free' });
-  const compose = '<details class="compose-panel"><summary><span><span class="compose-title">Новая публикация</span><span class="compose-subtitle">Создать запрос или предложение</span></span></summary><div class="compose-body">' + form + '</div></details>';
-  const filters = '<section class="card"><form method="GET" action="/board"><div class="grid grid-3">' +
-    '<div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div>' +
-    '<div><label>Показывать</label><select name="kind"><option value="all"' + (kindFilter === 'all' ? ' selected' : '') + '>Всё вместе</option><option value="demand"' + (kindFilter === 'demand' ? ' selected' : '') + '>Мне нужно</option><option value="offer"' + (kindFilter === 'offer' ? ' selected' : '') + '>Я могу</option></select></div>' +
-    '<div><label>Категория</label><select name="category"><option value="">Все категории</option>' + categories.map(value => '<option value="' + esc(value) + '"' + (category === value ? ' selected' : '') + '>' + esc(value) + '</option>').join('') + '</select></div></div><button class="btn btn-ghost btn-sm mt-1" type="submit">Применить</button> <a class="btn btn-ghost btn-sm" href="/board">Сбросить</a></form></section>';
+  const compose = '<details class="compose-panel"><summary><span class="compose-title">+ Новая публикация</span><span class="compose-subtitle">Запрос или предложение</span></summary><div class="compose-body">' + form + '</div></details>';
+  const filters = '<div class="board-toolbar"><form method="GET" action="/board">' +
+    '<input name="q" value="' + esc(q) + '" placeholder="Поиск по доске">' +
+    '<select name="kind"><option value="all"' + (kindFilter === 'all' ? ' selected' : '') + '>Все публикации</option><option value="demand"' + (kindFilter === 'demand' ? ' selected' : '') + '>Ищу помощь</option><option value="offer"' + (kindFilter === 'offer' ? ' selected' : '') + '>Могу помочь</option></select>' +
+    '<select name="category"><option value="">Все категории</option>' + categories.map(value => '<option value="' + esc(value) + '"' + (category === value ? ' selected' : '') + '>' + esc(value) + '</option>').join('') + '</select>' +
+    '<button class="link-button" type="submit">Найти</button><a class="link-button muted" href="/board">Сбросить</a></form></div>'
   const deadlineDisplayScript = '<script>' +
     'document.querySelectorAll("[data-deadline-utc]").forEach(function(el){const date=new Date(el.dataset.deadlineUtc);if(!Number.isNaN(date.getTime()))el.textContent=date.toLocaleString("ru-RU",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});});' +
     'document.querySelectorAll("[data-deadline-date]").forEach(function(el){const p=el.dataset.deadlineDate.split("-").map(Number);const date=new Date(p[0],p[1]-1,p[2],12,0,0);if(!Number.isNaN(date.getTime()))el.textContent=date.toLocaleDateString("ru-RU",{day:"2-digit",month:"long",year:"numeric"});});' +
     '</script>';
   const recommendations = recommendedHelpOffers(user).map(match =>
-    '<article class="card help-match"><div class="row-between"><span class="badge badge-success">Подходит к вашему запросу</span><span class="badge badge-muted">' + esc(match.offer.category) + '</span></div>' +
-    '<p class="muted small mt-1">По запросу: ' + esc(match.request.title) + '</p>' +
-    '<h3 class="mt-1">' + esc(match.offer.title) + '</h3><p>' + esc(match.offer.description).replace(/\\n/g, '<br>') + '</p>' +
-    '<div class="row-between mt-1"><b>' + esc(moneyLabel(match.offer)) + '</b><span class="muted small">' + esc(match.author.full_name) + (match.author.class_name ? ' · ' + esc(match.author.class_name) : '') + '</span></div>' +
-    renderResponseForm({ ...match.offer, post_kind: 'offer' }) +
-    '</article>'
+    '<article class="suggestion-row"><div><span class="muted small">По запросу: ' + esc(match.request.title) + '</span>' +
+      '<h3>' + esc(match.offer.title) + '</h3><p class="muted small">' + esc(match.author.full_name) + ' · ' +
+      esc(moneyLabel(match.offer)) + '</p></div>' + renderResponseForm({ ...match.offer, post_kind: 'offer' }) + '</article>'
   ).join('');
   const recommendationSection = recommendations
-    ? '<section class="mt-2"><div class="row-between"><div><h2>Возможно, вам уже могут помочь</h2><p class="muted small">Подобраны активные предложения в категориях ваших запросов. Бесплатные варианты показываются первыми.</p></div></div>' + recommendations + '</section>'
+    ? '<section class="help-recommendations"><h2>По твоим запросам</h2><p>Предложения из тех же категорий.</p>' + recommendations + '</section>'
     : '';
   sendHtml(res, layout('Общая доска', user,
-    flashBox(url) + '<div class="row-between"><div><h1>Общая доска</h1><p class="muted">Все запросы и предложения в одной ленте.</p></div><span class="badge badge-muted">' + posts.length + ' публикаций</span></div>' +
-    recommendationSection + compose + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + deadlineDisplayScript
+    flashBox(url) + '<div class="page-heading"><h1>Доска помощи</h1><p class="muted">Запросы и предложения учеников.</p></div>' +
+    recommendationSection + compose + filters + '<div class="row-between board-count"><span class="muted small">' + posts.length + ' публикаций</span></div>' +
+    '<div class="board-feed">' + (cards || '<p class="muted" style="padding:24px 0">Публикаций пока нет. Создай первую или измени фильтры.</p>') + '</div>' + deadlineDisplayScript
   ));
 }
 
