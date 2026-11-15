@@ -70,6 +70,155 @@ th{color:#78716C;font-weight:500;font-size:12px;text-transform:uppercase}
   .header-inner{height:auto;padding:10px 0}
   .user-info{display:none}
 }
+
+:root {
+  color-scheme: light;
+  --page-bg: #F4F6F8;
+  --surface: #FFFFFF;
+  --surface-soft: #F8FAFC;
+  --text: #202A35;
+  --muted: #687586;
+  --border: #E3E8EF;
+  --link: #286B71;
+  --accent: #286B71;
+  --accent-hover: #20585D;
+  --focus: #4B8E93;
+  --table-head: #F8FAFC;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page-bg: #12191F;
+  --surface: #1A242C;
+  --surface-soft: #202C35;
+  --text: #E8EEF2;
+  --muted: #A2AFBA;
+  --border: #2D3A44;
+  --link: #91C8C5;
+  --accent: #78B8B2;
+  --accent-hover: #9ACFC9;
+  --focus: #8BCAC4;
+  --table-head: #202C35;
+}
+html { background: var(--page-bg); }
+body {
+  background: var(--page-bg);
+  color: var(--text);
+  transition: background-color .18s ease, color .18s ease;
+}
+a { color: var(--link); }
+.header { background: var(--surface); border-color: var(--border); }
+.logo { color: var(--link); }
+.nav a { color: var(--text); }
+.nav a:hover { background: var(--surface-soft); }
+.user-info small, .muted { color: var(--muted); }
+.card { background: var(--surface); border-color: var(--border); box-shadow: 0 1px 2px rgba(15, 23, 42, .035); }
+:root[data-theme="dark"] .card { box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.card.balance {
+  background: #FFF8E8;
+  border-color: #F0E2BE;
+}
+:root[data-theme="dark"] .card.balance {
+  background: #302B20;
+  border-color: #514632;
+}
+.btn-primary { background: var(--accent); color: #FFFFFF; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-ghost { color: var(--text); border-color: var(--border); }
+.btn-ghost:hover { background: var(--surface-soft); }
+input, select, textarea {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border);
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .85; }
+input:focus, select:focus, textarea:focus {
+  outline-color: var(--focus);
+}
+.badge-primary-soft { background: #E5F2F1; color: #286B71; }
+.badge-muted { background: var(--surface-soft); color: var(--muted); }
+:root[data-theme="dark"] .badge-primary-soft { background: #263F42; color: #A7D8D3; }
+:root[data-theme="dark"] .badge-accent { background: #403722; color: #E9CA83; }
+:root[data-theme="dark"] .badge-success { background: #203B30; color: #9BD6B2; }
+:root[data-theme="dark"] .badge-danger { background: #452A2D; color: #F0A6A8; }
+.alert-info { background: #EAF1F8; color: #36556F; }
+.alert-danger { background: #FCEEEE; color: #9F3439; }
+.alert-success { background: #EAF5EE; color: #316B48; }
+:root[data-theme="dark"] .alert-info { background: #233545; color: #B6D6EF; }
+:root[data-theme="dark"] .alert-danger { background: #432B2F; color: #F1B3B5; }
+:root[data-theme="dark"] .alert-success { background: #233B30; color: #B0DEC0; }
+hr { border-color: var(--border); }
+th, td { border-color: var(--border); }
+th { color: var(--muted); background: var(--table-head); }
+.progress { background: #DDECE9; }
+.progress-bar { background: var(--accent); }
+:root[data-theme="dark"] .progress { background: #2A3C3C; }
+.metric .value { color: var(--text); }
+.theme-toggle { white-space: nowrap; min-height: 36px; }
+.mobile-nav { display: none; }
+@media (max-width: 760px) {
+  .container { padding-left: 14px; padding-right: 14px; }
+  .header-inner { min-height: 58px; height: auto; padding: 8px 0; gap: 10px; flex-wrap: nowrap; }
+  .logo { flex: 0 0 auto; }
+  .nav { display: none; }
+  .header-right { margin-left: auto; gap: 7px; flex: 0 1 auto; }
+  .header-right .user-info { display: none; }
+  .header-right .badge { display: none; }
+  .theme-toggle { font-size: 12px; padding: 6px 9px; }
+  .mobile-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 24px rgba(15, 23, 42, .07);
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-nav a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 0 auto;
+    min-width: 72px;
+    min-height: 48px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .mobile-nav a:hover { background: var(--surface-soft); text-decoration: none; }
+  main { padding-top: 18px; padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 23px; }
+  .card { padding: 16px; border-radius: 11px; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: minmax(0, 1fr); }
+  input, select, textarea { font-size: 16px; }
+  table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  th, td { white-space: nowrap; }
+  .row-between { align-items: flex-start; }
+  .btn { min-height: 38px; }
+}
+@media (min-width: 761px) and (max-width: 1024px) {
+  .container { padding-left: 18px; padding-right: 18px; }
+  .header-inner { gap: 12px; }
+  .nav a { padding: 8px 9px; font-size: 13px; }
+  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
 `;
 
 
@@ -93,26 +242,55 @@ function autoRefreshScript() {
 
 
 function layout(title, user, content) {
-  const nav = !user ? '' : `<nav class="nav">
+  const navItems = !user ? '' : `
     ${user.role === 'student' ? `
       <a href="/app">Главная</a><a href="/market">Маркет</a><a href="/orders">Заказы</a>
       <a href="/auctions">Аукционы</a><a href="/exchange">Биржа</a><a href="/wallet">Кошелёк</a>
     ` : ''}
     ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a>` : ''}
     ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a>` : ''}
-  </nav>`;
+  `;
+  const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
+  const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
   const badge = user && user.role === 'student'
     ? `<span class="badge badge-accent">🪙 ${balance(user.id, 'available')} ScRl</span>` : '';
-  const right = user ? `<div class="header-right">${badge}
-    <div class="user-info"><b>${esc(user.full_name)}</b><small>${user.role}</small></div>
-    <a href="/logout" class="btn btn-ghost btn-sm">Выйти</a></div>` : '';
-  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+  const themeToggle = `<button class="btn btn-ghost btn-sm theme-toggle" type="button"
+    data-theme-toggle aria-label="Переключить цветовую тему">Тёмная тема</button>`;
+  const accountInfo = user ? `
+    <div class="user-info"><b>${esc(user.full_name)}</b><small>${esc(user.role)}</small></div>
+    <a href="/logout" class="btn btn-ghost btn-sm">Выйти</a>` : '';
+  const right = `<div class="header-right">${badge}${themeToggle}${accountInfo}</div>`;
+
+  return `<!DOCTYPE html><html lang="ru" data-theme="light"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>(function(){try{var t=localStorage.getItem('scrl-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 <title>${esc(title)} — ScRl</title><style>${CSS}</style></head>
 <body><header class="header"><div class="container header-inner">
 <a href="/" class="logo"><span class="coin">S</span>ScRl</a>${nav}${right}
-</div></header><main class="container">${content}</main>${autoRefreshScript()}</body></html>`;
+</div></header><main class="container">${content}</main>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
 }
 
+function themeScript() {
+  return `<script>
+(function(){
+  var root = document.documentElement;
+  var button = document.querySelector('[data-theme-toggle]');
+  function updateButton(){
+    if(!button) return;
+    var dark = root.dataset.theme === 'dark';
+    button.textContent = dark ? '☀ Светлая' : '☾ Тёмная';
+    button.setAttribute('aria-pressed', String(dark));
+    button.title = dark ? 'Включить светлую тему' : 'Включить тёмную тему';
+  }
+  updateButton();
+  if(button) button.addEventListener('click', function(){
+    var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('scrl-theme', next); } catch(e) {}
+    updateButton();
+  });
+})();
+</script>`;
+}
 
-module.exports = { CSS, autoRefreshScript, layout };
+module.exports = { CSS, autoRefreshScript, layout, themeScript };
