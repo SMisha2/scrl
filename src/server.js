@@ -20,7 +20,7 @@ bootstrapAdmin();
 function isSameOrigin(req) {
   const expectedHost = String(req.headers.host || '').toLowerCase();
   const source = req.headers.origin || req.headers.referer;
-  if (!source) return true;
+  if (!source || source === 'null') return false;
   try {
     const parsed = new URL(source);
     return ['http:', 'https:'].includes(parsed.protocol) && parsed.host.toLowerCase() === expectedHost;
