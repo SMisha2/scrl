@@ -36,7 +36,7 @@ function moneyLabel(post) {
   if (post.price_mode === 'free') return 'Бесплатно';
   if (post.price_mode === 'barter') return 'Обмен';
   if (post.price_mode === 'negotiable') return 'Договорная цена';
-  if (post.price_mode === 'range') return (post.price_min || 0) + '–' + (post.price_max || 0) + ' ScRl';
+  if (post.price_mode === 'range') return (post.price_min || 0) + ' до ' + (post.price_max || 0) + ' ScRl';
   return (post.price || 0) + ' ScRl';
 }
 
@@ -137,7 +137,7 @@ function pageBoard(res, user, url, kind) {
   }).join('');
   const action = isDemand ? '/demand/create' : '/offers/create';
   const heading = isDemand ? 'Доска спроса' : 'Доска предложений';
-  const description = isDemand ? 'Опишите, что вам нужно, — другие ученики смогут откликнуться.' : 'Расскажите, что вы умеете и чем готовы поделиться.';
+  const description = isDemand ? 'Опишите, что вам нужно. Другие ученики смогут откликнуться.' : 'Расскажите, что вы умеете и чем готовы поделиться.';
   const options = Object.keys(PRICE_MODES).map(key => '<option value="' + key + '">' + PRICE_MODES[key] + '</option>').join('');
   const form = '<section class="card"><h2>' + (isDemand ? 'Создать запрос' : 'Создать предложение') + '</h2><p class="muted small">' + description + '</p>' +
     '<form method="POST" action="' + action + '" class="mt-1"><label>Название</label><input name="title" maxlength="100" required placeholder="' + (isDemand ? 'Например: нужна помощь с Python' : 'Например: помогу с Python') + '">' +
@@ -279,7 +279,7 @@ function renderPostValidationError(res, user, initial, message) {
     ...state.demand_posts.map(post => post.category),
     ...state.offer_posts.map(post => post.category)
   ].filter(Boolean))).sort();
-  const content = '<div class="row-between"><div><h1>Новая публикация</h1><p class="muted">Проверьте данные — введённый текст сохранён.</p></div><a class="btn btn-ghost btn-sm" href="/board">На доску</a></div>' +
+  const content = '<div class="row-between"><div><h1>Новая публикация</h1><p class="muted">Проверьте данные. Текст сохранён.</p></div><a class="btn btn-ghost btn-sm" href="/board">На доску</a></div>' +
     renderBoardPostForm(categories, initial, message);
   return sendHtml(res, layout('Проверка публикации', user, content), 422);
 }
@@ -567,7 +567,7 @@ function pageDeal(res, user, url) {
     actions = '<form method="POST" action="/deals/confirm"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><button class="btn btn-primary">Подтвердить и завершить</button></form><form method="POST" action="/deals/dispute"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><input name="reason" required maxlength="500" placeholder="Причина спора"><button class="btn btn-ghost">Открыть спор</button></form>';
   }
   const review = deal.status === 'completed' && !state.reviews.some(r => r.deal_id === deal.id && r.reviewer_id === user.id)
-    ? '<section class="card"><h2>Оставить отзыв</h2><form method="POST" action="/deals/review"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><label>Оценка</label><select name="rating"><option value="5">5 — Отлично</option><option value="4">4 — Хорошо</option><option value="3">3 — Нормально</option><option value="2">2 — Плохо</option><option value="1">1 — Очень плохо</option></select><label>Комментарий</label><textarea name="comment" maxlength="500" rows="2"></textarea><button class="btn btn-primary">Опубликовать отзыв</button></form></section>' : '';
+    ? '<section class="card"><h2>Оставить отзыв</h2><form method="POST" action="/deals/review"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><label>Оценка</label><select name="rating"><option value="5">5: Отлично</option><option value="4">4: Хорошо</option><option value="3">3: Нормально</option><option value="2">2: Плохо</option><option value="1">1: Очень плохо</option></select><label>Комментарий</label><textarea name="comment" maxlength="500" rows="2"></textarea><button class="btn btn-primary">Опубликовать отзыв</button></form></section>' : '';
   sendHtml(res, layout('Сделка', user, flashBox(url) + '<div class="row-between"><div><h1>' + esc(post ? post.title : 'Сделка') + '</h1><p class="muted">Статус: ' + esc(deal.status) + ' · ' + (deal.price ? deal.price + ' ScRl в escrow' : deal.deal_type === 'barter' ? 'Обмен без денежных расчётов' : 'Бесплатная сделка') + '</p></div><a class="btn btn-ghost btn-sm" href="/deals">Все сделки</a></div>' +
     '<section class="card"><h2>Переписка и условия</h2>' + (messages || '<p class="muted">Сообщений пока нет.</p>') +
     (['completed', 'disputed', 'cancelled'].includes(deal.status) ? '' : '<form method="POST" action="/deals/message"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><textarea name="message" rows="3" maxlength="1000" required placeholder="Сообщение участнику"></textarea><button class="btn btn-primary">Отправить сообщение</button></form>') +
@@ -714,7 +714,7 @@ function pageProfile(res, user, url) {
   const target = state.users.find(u => u.id === targetId);
   if (!target) return redirect(res, '/?error=notfound');
   const reviews = state.reviews.filter(r => r.target_user_id === target.id);
-  const average = reviews.length ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : '—';
+  const average = reviews.length ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : 'Нет оценок';
   const completed = state.deals.filter(d => d.status === 'completed' && (d.buyer_id === target.id || d.seller_id === target.id)).length;
   const offers = state.offer_posts.filter(p => p.user_id === target.id && p.status === 'active');
   sendHtml(res, layout('Профиль', user, '<h1>Профиль</h1><section class="card"><div class="row-between"><div><h2>' + esc(target.full_name) + '</h2><p class="muted">' + esc(target.class_name || 'Участник ScRl') + '</p></div><span class="badge badge-primary-soft">' + esc(target.role) + '</span></div><div class="grid grid-2 mt-2"><div><div class="muted small">Рейтинг</div><h2>' + average + ' / 5</h2><p class="muted small">' + reviews.length + ' отзывов</p></div><div><div class="muted small">Завершённые сделки</div><h2>' + completed + '</h2></div></div></section><section class="card"><h2>Активные предложения</h2>' +
