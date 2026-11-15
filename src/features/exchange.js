@@ -26,7 +26,7 @@ function exchangeEscrow(orderId, sellerId, side) {
 function pageExchange(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const market = recordTokenRateCandle();
-  const referenceRate = market.marketPrice;
+  const referenceRate = market.referenceRate;
   const inverseRate = referenceRate > 0 ? 1 / referenceRate : 0;
   const tradeable = canTrade(user);
   const offers = state.exchange_orders.filter(order => {
@@ -90,14 +90,14 @@ function pageExchange(res, user, url) {
 
   sendHtml(res, layout('Биржа ScRl / V-RUB', user, flashBox(url) +
     '<div class="row-between"><div><h1>Биржа ScRl / V-RUB</h1><p class="muted">Два направления обмена внутри учебной экономики.</p></div><span class="badge badge-accent">Симуляция</span></div>' +
-    '<section class="card"><div class="row-between"><div><div class="muted small">Рыночная цена по сделкам за 7 дней</div><h2>1 ScRl = ' +
-      referenceRate.toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' V-RUB</h2></div>' +
+    '<section class="card"><div class="row-between"><div><div class="muted small">Текущее соотношение балансов · пересчитывается автоматически</div><h2>1 ScRl = ' +
+      referenceRate.toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) + ' V-RUB</h2></div>' +
       '<a class="btn btn-ghost btn-sm" href="/wallet">К кошельку</a></div>' +
-      '<div class="grid grid-3 mt-1"><div><div class="muted small">Обеспеченный ориентир</div><b>' + market.backedRate.toFixed(4) + ' V-RUB / ScRl</b></div>' +
-      '<div><div class="muted small">Покрытие</div><b>' + (market.coverageRatio * 100).toFixed(1) + '%</b></div>' +
-      '<div><div class="muted small">Комиссия сжигания</div><b>' + (market.burnFeeRate * 100).toFixed(2) + '%</b></div></div>' +
+      '<div class="grid grid-3 mt-1"><div><div class="muted small">Последняя цена сделки</div><b>' + market.marketPrice.toFixed(6) + ' V-RUB / ScRl</b></div>' +
+      '<div><div class="muted small">Средняя цена за 7 дней</div><b>' + market.vwapPrice.toFixed(6) + ' V-RUB / ScRl</b></div>' +
+      '<div><div class="muted small">Покрытие / комиссия</div><b>' + (market.coverageRatio * 100).toFixed(1) + '% / ' + (market.burnFeeRate * 100).toFixed(2) + '%</b></div></div>' +
       (market.excessScRl > 0 ? '<div class="alert alert-info mt-1">В обращении на ' + market.excessScRl.toLocaleString('ru-RU') + ' ScRl больше обеспеченного лимита. Комиссия повышена, её часть сжигает токены.</div>' : '') +
-      '<p class="muted small mt-1">Рыночная цена меняется после совершённых обменов. Покрытие рассчитывается отдельно: V-RUB в кошельках / целевой курс. V-RUB — виртуальные единицы, не реальные рубли.</p></section>' +
+      '<p class="muted small mt-1">Соотношение балансов = все V-RUB участников / все ScRl в обращении. Оно меняется при изменении общей массы валют. Цена последней сделки обновляется отдельно после каждого исполненного обмена. V-RUB — виртуальные единицы, не реальные рубли.</p></section>' +
     '<div class="grid grid-2"><section class="card"><div class="muted small">Доступно ScRl</div><div style="font-size:24px;font-weight:700">' +
       balance(user.id, 'available').toLocaleString('ru-RU') + ' ScRl</div></section><section class="card"><div class="muted small">Доступно V-RUB</div><div style="font-size:24px;font-weight:700">' +
       balance(user.id, 'vrub').toLocaleString('ru-RU') + ' V-RUB</div><div class="muted small">Заблокировано: ' +
