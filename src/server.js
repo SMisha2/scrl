@@ -14,6 +14,7 @@ const assistant = require('./features/assistant');
 const moderation = require('./features/moderation-v2');
 const social = require('./features/social');
 const finance = require('./features/finance');
+const impact = require('./features/impact');
 const { bootstrapAdmin } = require('./services/admin-bootstrap');
 bootstrapAdmin();
 
@@ -83,6 +84,7 @@ const server = http.createServer(async (req, res) => {
     if (path === '/admin' && method === 'GET') return pageAdmin(res, user, url);
     if (path === '/admin/users' && method === 'GET') return pageAdminUsers(res, user, url);
     if (path === '/admin/market' && method === 'GET') return finance.pageTokenMarket(res, user, url);
+    if ((path === '/admin/impact' || path === '/teacher/impact') && method === 'GET') return impact.pageImpact(res, user);
     if (path === '/admin/market/settings' && method === 'POST') return finance.handleTokenMarketSettings(res, user, params);
     if (path === '/admin/credit' && method === 'POST') return handleCredit(res, user, params);
     if (path === '/admin/debit' && method === 'POST') return handleDebit(res, user, params);

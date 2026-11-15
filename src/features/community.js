@@ -7,6 +7,7 @@ const { layout } = require('../views/layout');
 const { notify, unreadCount } = require('../utils/notifications');
 const { analyseSubmission } = require('../services/ai-moderation');
 const { parseDeadline, resolvePostTerms } = require('../services/board-rules');
+const { recommendHelpOffers } = require('../services/board-matching');
 
 function dealLedgerState(deal) {
   const held = state.accounts.find(item => item.user_id === deal.buyer_id && item.kind === 'held');
@@ -178,6 +179,16 @@ function renderResponseForm(post) {
     '<button class="btn btn-primary btn-sm" type="submit">' + (isDemand ? 'Предложить помощь' : 'Запросить помощь') + '</button></form>';
 }
 
+function recommendedHelpOffers(user) {
+  return recommendHelpOffers({
+    user,
+    demandPosts: state.demand_posts,
+    offerPosts: state.offer_posts,
+    users: state.users,
+    canTradeUser: canTrade,
+    limit: 3
+  });
+}
 function pageCommunity(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
   const q = (url.searchParams.get('q') || '').trim().toLowerCase();
@@ -235,9 +246,20 @@ function pageCommunity(res, user, url) {
     'document.querySelectorAll("[data-deadline-utc]").forEach(function(el){const date=new Date(el.dataset.deadlineUtc);if(!Number.isNaN(date.getTime()))el.textContent=date.toLocaleString("ru-RU",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});});' +
     'document.querySelectorAll("[data-deadline-date]").forEach(function(el){const p=el.dataset.deadlineDate.split("-").map(Number);const date=new Date(p[0],p[1]-1,p[2],12,0,0);if(!Number.isNaN(date.getTime()))el.textContent=date.toLocaleDateString("ru-RU",{day:"2-digit",month:"long",year:"numeric"});});' +
     '</script>';
+  const recommendations = recommendedHelpOffers(user).map(match =>
+    '<article class="card"><div class="row-between"><span class="badge badge-success">Подходит к вашему запросу</span><span class="badge badge-muted">' + esc(match.offer.category) + '</span></div>' +
+    '<p class="muted small mt-1">По запросу: ' + esc(match.request.title) + '</p>' +
+    '<h3 class="mt-1">' + esc(match.offer.title) + '</h3><p>' + esc(match.offer.description).replace(/\\n/g, '<br>') + '</p>' +
+    '<div class="row-between mt-1"><b>' + esc(moneyLabel(match.offer)) + '</b><span class="muted small">' + esc(match.author.full_name) + (match.author.class_name ? ' · ' + esc(match.author.class_name) : '') + '</span></div>' +
+    renderResponseForm({ ...match.offer, post_kind: 'offer' }) +
+    '</article>'
+  ).join('');
+  const recommendationSection = recommendations
+    ? '<section class="mt-2"><div class="row-between"><div><h2>Возможно, вам уже могут помочь</h2><p class="muted small">Подобраны активные предложения в категориях ваших запросов. Бесплатные варианты показываются первыми.</p></div></div>' + recommendations + '</section>'
+    : '';
   sendHtml(res, layout('Общая доска', user,
     flashBox(url) + '<div class="row-between"><div><h1>Общая доска</h1><p class="muted">Все запросы и предложения в одной ленте.</p></div><span class="badge badge-muted">' + posts.length + ' публикаций</span></div>' +
-    form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + deadlineDisplayScript
+    recommendationSection + form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + deadlineDisplayScript
   ));
 }
 
