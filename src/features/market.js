@@ -5,6 +5,7 @@ const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { analyseText } = require('../services/moderation-rules');
+const { notify } = require('../utils/notifications');
 function pageMarket(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const tradeable = canTrade(user);
@@ -76,6 +77,11 @@ function handleCreateListing(res, user, params) {
     });
   }
   save();
+  if (moderation.requiresReview) {
+    state.users.filter(admin => admin.role === 'admin').forEach(admin =>
+      notify(admin.id, 'moderation', 'Новое объявление на проверке', 'Требуется проверка объявления «' + listing.title + '».', '/admin/moderation')
+    );
+  }
   return redirect(res, moderation.requiresReview ? '/market?msg=pending_review' : '/market?msg=created');
 }
 
