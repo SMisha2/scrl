@@ -69,10 +69,10 @@ function pageMarket(res, user, url) {
 
   sendHtml(res, layout('Маркет', user, `
     ${flashBox(url)}
-    <div class="row-between"><div><h1>Услуги учеников</h1><p class="muted">Выбирай предложения других учеников. При покупке сумма сразу резервируется в сделке.</p></div><div class="text-right"><b>${balance(user.id, 'available').toLocaleString('ru-RU')} ScRl</b><div class="muted small">доступно</div><a class="link-button" href="/orders">Мои заказы</a></div></div>
+    <div class="row-between"><div><h1>Услуги учеников</h1></div><div class="text-right"><b>${balance(user.id, 'available').toLocaleString('ru-RU')} ScRl</b><div class="muted small">доступно</div><a class="link-button" href="/orders">Мои заказы</a></div></div>
     ${form}
     ${mine ? `<div class="card"><h2>Мои объявления</h2>${mine}</div>` : ''}
-    <div class="grid grid-3">${items || '<p class="muted">Пока нет объявлений. Станьте первым продавцом.</p>'}</div>`));
+    <div class="grid grid-3">${items || '<p class="muted">Пока нет объявлений.</p>'}</div>`));
 }
 
 
