@@ -79,7 +79,7 @@ function pageApp(res, user, url) {
     '<div class="home-sections">' +
       '<section><h2 class="home-section-title">Сделки</h2>' +
         (activeDeals ? '<ul class="home-list">' + activeDeals + '</ul>' :
-          '<p class="muted small" style="padding:12px 0">Пока нет сделок.</p>') +
+          '<p class="muted small" style="padding:12px 0">Здесь появятся твои сделки.</p>') +
         '<a class="small" href="/activity#deals">Все сделки →</a>' +
       '</section>' +
       '<section><h2 class="home-section-title">Операции</h2>' +
