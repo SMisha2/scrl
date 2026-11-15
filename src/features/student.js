@@ -63,7 +63,7 @@ function pageApp(res, user, url) {
   const titleName = String(user.full_name || 'ученик').trim().split(/\s+/)[0] || 'ученик';
   const content = flashBox(url) +
     '<header class="home-greeting"><h1>Привет, ' + esc(titleName) + '</h1>' +
-    '<p>Найди помощь или предложи свою.</p></header>' +
+    '<p></header>' +
     '<section class="home-balances" aria-label="Баланс">' +
       '<div class="home-balance"><small>Доступно</small><strong>' + available.toLocaleString('ru-RU') + ' ScRl</strong>' +
         '<span class="muted small">' + held.toLocaleString('ru-RU') + ' ScRl в резерве</span></div>' +
@@ -72,38 +72,26 @@ function pageApp(res, user, url) {
     '</section>' +
     (!tradeable ? '<p class="muted small" style="margin-bottom:18px">Платные сделки и аукционы доступны с 14 лет. Бесплатная помощь доступна всем участникам.</p>' : '') +
     '<nav class="home-actions" aria-label="Основные действия">' +
-      '<a class="btn btn-primary" href="/board">Найти помощь или предложить свою</a>' +
+      '<a class="btn btn-primary" href="/board">Доска помощи</a>' +
       '<a href="/activity">Мои дела</a>' +
       '<a href="/wallet">Кошелёк</a>' +
-      '<a href="/auctions">Аукционы</a>' +
     '</nav>' +
-    '<section class="earn-guide" id="earn-guide" aria-labelledby="earn-guide-title">' +
-      '<div class="earn-guide-heading"><div><h2 id="earn-guide-title">Как получить ScRl</h2>' +
-      '<p>Есть четыре понятных способа пополнить баланс.</p></div><a class="small" href="/wallet">История начислений →</a></div>' +
-      '<div class="earn-guide-grid">' +
-        '<div class="earn-guide-item"><b>1. Стартовый бонус</b><p>При регистрации система начисляет разовый бонус. Его размер зависит от текущего курса и доступного резерва.</p></div>' +
-        '<div class="earn-guide-item"><b>2. За вклад в лицей</b><p>Учитель или школа могут поощрить ScRl за помощь другим, проект, достижения или инициативу. Спроси учителя, как отметить свой вклад.</p></div>' +
-        '<div class="earn-guide-item"><b>3. За платную помощь</b><p>Предложи свои навыки на доске и заранее согласуй цену. После подтверждения результата заказчиком оплата поступит исполнителю.</p></div>' +
-        '<div class="earn-guide-item"><b>4. Обмен на бирже</b><p>ScRl можно обменять на V-RUB или купить за V-RUB. Торговые действия доступны с 14 лет; V-RUB — виртуальные единицы, не реальные деньги. <a href="/exchange">Открыть биржу →</a></p></div>' +
-      '</div>' +
-      '<p class="muted small" style="margin-top:13px">Важно: публикация объявления и обычный отклик сами по себе не начисляют ScRl автоматически.</p>' +
-    '</section>' +
     '<div class="home-sections">' +
-      '<section><h2 class="home-section-title">Текущие договорённости</h2>' +
+      '<section><h2 class="home-section-title">Сделки</h2>' +
         (activeDeals ? '<ul class="home-list">' + activeDeals + '</ul>' :
-          '<p class="muted small" style="padding:12px 0">Пока нет активных договорённостей.</p>') +
-        '<a class="small" href="/activity#deals">Все договорённости →</a>' +
+          '<p class="muted small" style="padding:12px 0">Пока нет сделок.</p>') +
+        '<a class="small" href="/activity#deals">Все сделки →</a>' +
       '</section>' +
-      '<section><h2 class="home-section-title">Последние операции</h2>' +
+      '<section><h2 class="home-section-title">Операции</h2>' +
         (recent ? '<ul class="home-list">' + recent + '</ul>' :
-          '<p class="muted small" style="padding:12px 0">Операций пока нет.</p>') +
-        '<a class="small" href="/wallet">История кошелька →</a>' +
+          '<p class="muted small" style="padding:12px 0">Пока нет операций.</p>') +
+        '<a class="small" href="/wallet">Вся история →</a>' +
       '</section>' +
     '</div>' +
     '<section class="home-rate"><div class="row-between"><div><span class="muted small">Курс ScRl</span>' +
       '<div><strong>1 ScRl = ' + Number(market.referenceRate || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) +
       ' V-RUB</strong></div></div><a class="small" href="/exchange">Биржа →</a></div>' +
-      '<p class="muted small" style="margin-top:5px">V-RUB — внутренняя виртуальная единица, не реальные деньги.</p></section>';
+      '<p class="muted small" style="margin-top:5px">V-RUB — внутренняя единица ScRl, не реальные деньги.</p></section>';
 
   sendHtml(res, layout('Главная', user, content));
 }
@@ -149,7 +137,7 @@ function pageWallet(res, user, url) {
   sendHtml(res, layout('Кошелёк', user, `
     ${flashBox(url)}
     <h1>Кошелёк</h1>
-    <p class="muted small wallet-intro">Здесь находятся твои балансы и история. <a href="/app#earn-guide">Как получить ScRl?</a></p>
+     
     <div class="grid grid-3">
       <div class="card"><div class="muted small">Доступно</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'available')} ScRl</div></div>
       <div class="card"><div class="muted small">Заблокировано</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'held')} ScRl</div></div>
@@ -157,8 +145,8 @@ function pageWallet(res, user, url) {
       <div class="card"><div class="muted small">V-RUB заблокировано</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'vrub_held')}</div></div>
       <div class="card"><div class="muted small">Статус</div><div style="font-size:22px;font-weight:700">${ageStatus(user.birth_date)}</div></div>
     </div>
-    <div class="row mt-1"><a class="btn btn-primary btn-sm" href="/exchange">Обмен ScRl</a><a class="btn btn-ghost btn-sm" href="/auctions">Аукционы</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a><a class="small" href="/app#earn-guide">Откуда брать ScRl?</a></div>
-    <div class="card"><h2>История операций</h2>
+    <div class="row mt-1"><a class="btn btn-primary btn-sm" href="/exchange">Обмен ScRl</a><a class="btn btn-ghost btn-sm" href="/auctions">Аукционы</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a></div>
+    <div class="card"><h2>История</h2>
       ${historyRows ? `<table><thead><tr><th>Дата</th><th>Тип</th><th>Комментарий</th><th style="text-align:right">Сумма</th></tr></thead><tbody>${historyRows}</tbody></table>` : '<p class="muted">Пока пусто</p>'}
     </div>`));
 }
