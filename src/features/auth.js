@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { SESSION_MAX_AGE } = require('../config');
-const { state, account, systemAccount, save, recordTx } = require('../store');
+const { state, account, systemAccount, save, recordTx, grantStartingVrub } = require('../store');
 const { hashPassword, verifyPassword } = require('../security');
 const { sessions, parseCookies, sessionRecord, ageStatus } = require('../session');
 const { sendHtml, redirect } = require('../utils/http');
@@ -141,7 +141,8 @@ function doRegister(req, res, params) {
   state.users.push(user);
   const available = account(id, 'available');
   account(id, 'held');
-  account(id, 'vrub').balance = 1000;
+  account(id, 'vrub_held');
+  grantStartingVrub(id, 'registration');
 
   try {
     recordTx('signup_bonus', id, { amount: 100 }, [
@@ -151,6 +152,7 @@ function doRegister(req, res, params) {
   } catch (error) {
     state.users = state.users.filter(item => item.id !== id);
     state.accounts = state.accounts.filter(item => item.user_id !== id);
+    state.vrub_ledger_entries = state.vrub_ledger_entries.filter(item => item.user_id !== id);
     try { save(); } catch (saveError) {
       console.error('Registration rollback save failed:', saveError.message);
     }
