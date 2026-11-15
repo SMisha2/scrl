@@ -4,7 +4,7 @@ const { canTrade } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
-const { recordTokenRateCandle } = require('../services/token-market');
+const { recordTokenRateCandle, recordTokenMarketTrade, getTokenMarketStats, calculateBurnCommission } = require('../services/token-market');
 
 function orderSide(order) {
   return order.side === 'sell_vrub' ? 'sell_vrub' : 'sell_scrl';
@@ -26,7 +26,7 @@ function exchangeEscrow(orderId, sellerId, side) {
 function pageExchange(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const market = recordTokenRateCandle();
-  const referenceRate = market.referenceRate;
+  const referenceRate = market.marketPrice;
   const inverseRate = referenceRate > 0 ? 1 / referenceRate : 0;
   const tradeable = canTrade(user);
   const offers = state.exchange_orders.filter(order => {
@@ -90,10 +90,14 @@ function pageExchange(res, user, url) {
 
   sendHtml(res, layout('Биржа ScRl / V-RUB', user, flashBox(url) +
     '<div class="row-between"><div><h1>Биржа ScRl / V-RUB</h1><p class="muted">Два направления обмена внутри учебной экономики.</p></div><span class="badge badge-accent">Симуляция</span></div>' +
-    '<section class="card"><div class="row-between"><div><div class="muted small">Расчётный курс</div><h2>1 ScRl = ' +
+    '<section class="card"><div class="row-between"><div><div class="muted small">Рыночная цена по сделкам за 7 дней</div><h2>1 ScRl = ' +
       referenceRate.toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' V-RUB</h2></div>' +
       '<a class="btn btn-ghost btn-sm" href="/wallet">К кошельку</a></div>' +
-      '<p class="muted small">Курс рассчитывается автоматически: весь баланс V-RUB участников делится на общий выпуск ScRl. Это внутренняя виртуальная единица, не реальные рубли.</p></section>' +
+      '<div class="grid grid-3 mt-1"><div><div class="muted small">Обеспеченный ориентир</div><b>' + market.backedRate.toFixed(4) + ' V-RUB / ScRl</b></div>' +
+      '<div><div class="muted small">Покрытие</div><b>' + (market.coverageRatio * 100).toFixed(1) + '%</b></div>' +
+      '<div><div class="muted small">Комиссия сжигания</div><b>' + (market.burnFeeRate * 100).toFixed(2) + '%</b></div></div>' +
+      (market.excessScRl > 0 ? '<div class="alert alert-info mt-1">В обращении на ' + market.excessScRl.toLocaleString('ru-RU') + ' ScRl больше обеспеченного лимита. Комиссия повышена, её часть сжигает токены.</div>' : '') +
+      '<p class="muted small mt-1">Рыночная цена меняется после совершённых обменов. Покрытие рассчитывается отдельно: V-RUB в кошельках / целевой курс. V-RUB — виртуальные единицы, не реальные рубли.</p></section>' +
     '<div class="grid grid-2"><section class="card"><div class="muted small">Доступно ScRl</div><div style="font-size:24px;font-weight:700">' +
       balance(user.id, 'available').toLocaleString('ru-RU') + ' ScRl</div></section><section class="card"><div class="muted small">Доступно V-RUB</div><div style="font-size:24px;font-weight:700">' +
       balance(user.id, 'vrub').toLocaleString('ru-RU') + ' V-RUB</div><div class="muted small">Заблокировано: ' +
@@ -197,7 +201,9 @@ function handleExchangeBuy(res, user, params) {
   const held = escrow.held;
   if (!held || escrow.amount !== amount || held.balance < amount) return redirect(res, '/exchange?error=escrow');
 
+  const marketBefore = getTokenMarketStats();
   const previous = { status: order.status, buyer_id: order.buyer_id, filled_at: order.filled_at };
+  let executedTrade = null;
   order.status = 'filled';
   order.buyer_id = user.id;
   order.filled_at = new Date().toISOString();
@@ -205,7 +211,8 @@ function handleExchangeBuy(res, user, params) {
   try {
     let entries;
     if (side === 'sell_vrub') {
-      const commission = Math.min(cost - 1, Math.floor(cost * 0.01));
+      // Buyer pays ScRl for the seller's V-RUB. The fee is burned in ScRl.
+      const commission = calculateBurnCommission(cost, marketBefore);
       const sellerGets = cost - commission;
       if (balance(user.id, 'available') < cost) {
         order.status = previous.status;
@@ -222,12 +229,15 @@ function handleExchangeBuy(res, user, params) {
       if (commission > 0) {
         const burn = systemAccount('burn');
         if (!burn) throw new Error('Burn account is not configured');
-        entries.push({ accountId: burn.id, amount: commission, note: 'Комиссия биржи в ScRl' });
+        entries.push({ accountId: burn.id, amount: commission, note: 'Динамическая комиссия биржи — сжигание ScRl' });
       }
       recordTx('exchange_trade_vrub', user.id,
-        { orderId: order.id, side, amount, price, cost, costCurrency: 'ScRl', commission }, entries);
+        { orderId: order.id, side, amount, price, cost, costCurrency: 'ScRl', commission, commissionRate: marketBefore.burnFeeRate },
+        entries);
+      executedTrade = { amountScRl: sellerGets, amountVrub: amount, feeScRl: commission };
     } else {
-      const commission = Math.min(amount - 1, Math.floor(amount * 0.01));
+      // Buyer pays V-RUB for ScRl. The fee is withheld from delivery and burned.
+      const commission = calculateBurnCommission(amount, marketBefore);
       const buyerGets = amount - commission;
       if (balance(user.id, 'vrub') < cost) {
         order.status = previous.status;
@@ -237,17 +247,19 @@ function handleExchangeBuy(res, user, params) {
       }
       entries = [
         { accountId: held.id, amount: -amount, note: 'Продажа ScRl' },
-        { accountId: account(user.id, 'available').id, amount: buyerGets, note: 'Покупка ScRl' },
+        { accountId: account(user.id, 'available').id, amount: buyerGets, note: 'Покупка ScRl за V-RUB' },
         { accountId: account(user.id, 'vrub').id, amount: -cost, note: 'Оплата в V-RUB' },
         { accountId: account(seller.id, 'vrub').id, amount: cost, note: 'Получено V-RUB за ScRl' }
       ];
       if (commission > 0) {
         const burn = systemAccount('burn');
         if (!burn) throw new Error('Burn account is not configured');
-        entries.push({ accountId: burn.id, amount: commission, note: 'Комиссия биржи в ScRl' });
+        entries.push({ accountId: burn.id, amount: commission, note: 'Динамическая комиссия биржи — сжигание ScRl' });
       }
       recordTx('exchange_trade', user.id,
-        { orderId: order.id, side, amount, price, cost, costCurrency: 'V-RUB', commission }, entries);
+        { orderId: order.id, side, amount, price, cost, costCurrency: 'V-RUB', commission, commissionRate: marketBefore.burnFeeRate },
+        entries);
+      executedTrade = { amountScRl: buyerGets, amountVrub: cost, feeScRl: commission };
     }
   } catch (error) {
     order.status = previous.status;
@@ -257,10 +269,25 @@ function handleExchangeBuy(res, user, params) {
     else order.filled_at = previous.filled_at;
     save();
     console.error('Exchange trade failed:', error.message);
-    return redirect(res, '/exchange?error=trade');
+    return redirect(res, error.code === 'backing_limit' ? '/exchange?error=backing_limit' : '/exchange?error=trade');
   }
-  recordTokenRateCandle();
+
+  try {
+    recordTokenMarketTrade({
+      orderId: order.id,
+      side,
+      buyerId: user.id,
+      sellerId: seller.id,
+      amountScRl: executedTrade.amountScRl,
+      amountVrub: executedTrade.amountVrub,
+      feeScRl: executedTrade.feeScRl
+    });
+  } catch (error) {
+    console.error('Market price recording failed:', error.message);
+    recordTokenRateCandle();
+  }
   return redirect(res, '/exchange?msg=bought');
 }
+
 
 module.exports = { pageExchange, handleExchangeSell, handleExchangeCancel, handleExchangeBuy };
