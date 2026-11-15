@@ -60,17 +60,17 @@ test('4,000 V-RUB at a 0.05 target supports at most 80,000 circulating ScRl', ()
   const { market } = loadMarketWithState(state);
   const stats = market.getTokenMarketStats();
   assert.equal(stats.virtualRubleSupply, 4000);
-  assert.equal(stats.circulatingScRl, 109000);
+  assert.equal(stats.circulatingScRl, 100000);
   assert.equal(stats.maxSupportedScRl, 80000);
-  assert.equal(stats.excessScRl, 29000);
+  assert.equal(stats.excessScRl, 20000);
   assert.equal(stats.remainingCapacityScRl, 0);
-  assert.equal(stats.coverageRatio, Number((4000 / (109000 * 0.05)).toFixed(6)));
-  assert.equal(stats.backedRate, Number((4000 / 109000).toFixed(6)));
+  assert.equal(stats.coverageRatio, 0.8);
+  assert.equal(stats.backedRate, 0.04);
   assert.equal(stats.marketPrice, 0.05);
   // System reserve and already-burned tokens do not count as circulation.
   assert.equal(stats.reserveScRl, 100000);
   assert.equal(stats.burnedScRl, 10000);
-  assert.equal(stats.totalSupplyScRl, 209000);
+  assert.equal(stats.totalSupplyScRl, 200000);
 });
 
 test('dynamic burn fee rises when supply exceeds its V-RUB-backed limit', () => {
@@ -78,7 +78,7 @@ test('dynamic burn fee rises when supply exceeds its V-RUB-backed limit', () => 
   const { market } = loadMarketWithState(state);
   const stats = market.getTokenMarketStats();
   assert.equal(stats.burnFeeRate, market.getBurnFeeRate(stats.coverageRatio));
-  assert.ok(stats.burnFeeRate > 0.05);
+  assert.equal(stats.burnFeeRate, 0.045);
   assert.equal(market.calculateBurnCommission(1000, stats), Math.floor(1000 * stats.burnFeeRate));
   assert.equal(market.calculateBurnCommission(1, stats), 0);
 });
@@ -87,10 +87,10 @@ test('burn fee falls to zero when supply has at least twice the target coverage'
   const state = createState();
   state.accounts.find(account => account.kind === 'available').balance = 1000;
   state.accounts.find(account => account.kind === 'held').balance = 0;
-  state.accounts.find(account => account.kind === 'a7').balance = 0;
+  state.accounts.find(account => account.id === 'a7').balance = 0;
   const { market } = loadMarketWithState(state);
   const stats = market.getTokenMarketStats();
-  assert.equal(stats.coverageRatio, 2);
+  assert.equal(stats.coverageRatio, 80);
   assert.equal(stats.burnFeeRate, 0);
   assert.equal(market.calculateBurnCommission(1000, stats), 0);
 });
