@@ -44,21 +44,33 @@ function pageTeacher(res, user, url) {
 function handleIssue(res, user, params) {
   if (user.role !== 'teacher') return redirect(res, '/');
   const userId = params.get('user_id');
-  const amount = parseInt(params.get('amount') || '0', 10);
-  const reason = params.get('reason') || 'Другое';
-  const student = state.users.find(u => u.id === userId && u.role === 'student');
-  if (!student || !amount || amount < 1) return redirect(res, '/teacher?error=fields');
+  const amount = Number(params.get('amount') || 0);
+  const reason = (params.get('reason') || 'Другое').trim().slice(0, 180) || 'Другое';
+  const student = state.users.find(item => item.id === userId && item.role === 'student');
+  if (!student || !Number.isSafeInteger(amount) || amount < 1 || amount > WEEKLY_LIMIT) {
+    return redirect(res, '/teacher?error=fields');
+  }
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
   const issued = state.transactions
-    .filter(t => t.kind === 'credit_teacher' && t.initiator_id === user.id && t.created_at > weekAgo)
-    .reduce((s, t) => s + (t.payload.amount || 0), 0);
+    .filter(tx => tx.kind === 'credit_teacher' && tx.initiator_id === user.id && tx.created_at > weekAgo)
+    .reduce((sum, tx) => sum + Number(tx.payload?.amount || 0), 0);
   if (issued + amount > WEEKLY_LIMIT) return redirect(res, '/teacher?error=limit');
-  recordTx('credit_teacher', user.id, { amount, reason, studentId: userId }, [
-    { accountId: systemAccount('reserve').id, amount: -amount },
-    { accountId: account(userId, 'available').id, amount }
-  ]);
-  redirect(res, '/teacher?msg=issued');
+
+  const reserve = systemAccount('reserve');
+  if (!reserve) return redirect(res, '/teacher?error=ledger');
+  try {
+    recordTx('credit_teacher', user.id, { amount, reason, studentId: userId }, [
+      { accountId: reserve.id, amount: -amount, note: reason },
+      { accountId: account(userId, 'available').id, amount, note: reason }
+    ]);
+  } catch (error) {
+    console.error('Teacher credit failed:', error.message);
+    return redirect(res, '/teacher?error=ledger');
+  }
+  return redirect(res, '/teacher?msg=issued');
 }
+
+
 
 
 function pageAdmin(res, user, url) {
@@ -152,46 +164,88 @@ function pageAdminUsers(res, user, url) {
 function handleCredit(res, admin, params) {
   if (admin.role !== 'admin') return redirect(res, '/');
   const userId = params.get('user_id');
-  const amount = parseInt(params.get('amount') || '0', 10);
-  const reason = (params.get('reason') || '').trim();
-  if (!userId || !amount || amount < 1 || !reason) return redirect(res, '/admin/users?error=fields');
-  recordTx('credit_admin', admin.id, { amount, reason, target: userId }, [
-    { accountId: systemAccount('reserve').id, amount: -amount },
-    { accountId: account(userId, 'available').id, amount }
-  ]);
-  redirect(res, '/admin/users?msg=credited');
+  const amount = Number(params.get('amount') || 0);
+  const reason = (params.get('reason') || '').trim().slice(0, 180);
+  const student = state.users.find(item => item.id === userId && item.role === 'student');
+  if (!student || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000 || !reason) {
+    return redirect(res, '/admin/users?error=fields');
+  }
+  const reserve = systemAccount('reserve');
+  if (!reserve) return redirect(res, '/admin/users?error=ledger');
+  try {
+    recordTx('credit_admin', admin.id, { amount, reason, target: userId }, [
+      { accountId: reserve.id, amount: -amount, note: reason },
+      { accountId: account(userId, 'available').id, amount, note: reason }
+    ]);
+  } catch (error) {
+    console.error('Admin credit failed:', error.message);
+    return redirect(res, '/admin/users?error=ledger');
+  }
+  state.admin_audit_logs.push({
+    id: require('node:crypto').randomUUID(), actor_id: admin.id,
+    action: 'student_credit_admin', target_id: userId, reason,
+    created_at: new Date().toISOString()
+  });
+  save();
+  return redirect(res, '/admin/users?msg=credited');
 }
+
+
 
 
 function handleDebit(res, admin, params) {
   if (admin.role !== 'admin') return redirect(res, '/');
   const userId = params.get('user_id');
-  const amount = parseInt(params.get('amount') || '0', 10);
-  const reason = (params.get('reason') || '').trim();
-  if (!userId || !amount || amount < 1 || !reason) return redirect(res, '/admin/users?error=fields');
+  const amount = Number(params.get('amount') || 0);
+  const reason = (params.get('reason') || '').trim().slice(0, 180);
+  const student = state.users.find(item => item.id === userId && item.role === 'student');
+  if (!student || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000 || !reason) {
+    return redirect(res, '/admin/users?error=fields');
+  }
+  const reserve = systemAccount('reserve');
+  if (!reserve) return redirect(res, '/admin/users?error=ledger');
   try {
     recordTx('debit_admin', admin.id, { amount, reason, target: userId }, [
       { accountId: account(userId, 'available').id, amount: -amount, note: reason },
-      { accountId: systemAccount('reserve').id, amount, note: reason }
+      { accountId: reserve.id, amount, note: reason }
     ]);
-  } catch (e) {
+  } catch (error) {
+    console.error('Admin debit failed:', error.message);
     return redirect(res, '/admin/users?error=insufficient');
   }
-  redirect(res, '/admin/users?msg=debited');
+  state.admin_audit_logs.push({
+    id: require('node:crypto').randomUUID(), actor_id: admin.id,
+    action: 'student_debit_admin', target_id: userId, reason,
+    created_at: new Date().toISOString()
+  });
+  save();
+  return redirect(res, '/admin/users?msg=debited');
 }
+
+
 
 
 function handleBlock(res, admin, params) {
   if (admin.role !== 'admin') return redirect(res, '/');
   const userId = params.get('user_id');
-  if (userId === admin.id) return redirect(res, '/admin/users?error=bad');
+  const user = state.users.find(item => item.id === userId);
+  if (!user) return redirect(res, '/admin/users?error=notfound');
+  if (user.id === admin.id || user.role === 'admin') return redirect(res, '/admin/users?error=bad');
   const block = params.get('block') === '1';
-  const u = state.users.find(x => x.id === userId);
-  if (!u) return redirect(res, '/admin/users?error=notfound');
-  u.is_blocked = block;
+  user.is_blocked = block;
+  user.blocked_by = block ? admin.id : null;
+  user.blocked_at = block ? new Date().toISOString() : null;
+  state.admin_audit_logs.push({
+    id: require('node:crypto').randomUUID(), actor_id: admin.id,
+    action: block ? 'user_blocked' : 'user_unblocked',
+    target_id: user.id, reason: 'Изменение статуса аккаунта модератором',
+    created_at: new Date().toISOString()
+  });
   save();
-  redirect(res, `/admin/users?msg=${block ? 'blocked' : 'unblocked'}`);
+  return redirect(res, '/admin/users?msg=' + (block ? 'blocked' : 'unblocked'));
 }
+
+
 
 
 module.exports = { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock };
