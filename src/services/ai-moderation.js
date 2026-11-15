@@ -256,9 +256,14 @@ async function getGigaChatModel(config, accessToken) {
 
     if (!available.length) throw new Error('GigaChat returned no available chat models');
 
-    const preferred = [config.model, ...GIGACHAT_MODEL_PREFERENCE]
-      .filter(model => model && model.toLowerCase() !== 'auto');
-    const selected = preferred.find(model => available.includes(model)) || available[0];
+    // Never prefer the legacy generic "GigaChat" alias: choose only an explicit
+    // model ID currently exposed to this API key.
+    const configured = config.model && config.model.toLowerCase() !== 'auto' && config.model !== 'GigaChat'
+      ? [config.model]
+      : [];
+    const preferred = [...configured, ...GIGACHAT_MODEL_PREFERENCE];
+    const selected = preferred.find(model => available.includes(model)) ||
+      available.find(model => model !== 'GigaChat') || available[0];
 
     cachedGigaModel = selected;
     cachedGigaModelKey = cacheKey;
