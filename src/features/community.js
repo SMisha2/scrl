@@ -31,7 +31,7 @@ function postCard(post, type, user, showApply) {
   const applications = state.applications.filter(x => x.post_id === post.id && x.post_type === type).length;
   const demoBadge = post.is_demo ? '<span class="badge badge-muted">DEMO</span>' : '';
   const action = post.user_id === user.id
-    ? '<span class="badge badge-muted">Ваше объявление</span>'
+    ? '<span class="badge badge-muted">Ваше объявление</span>' + (post.status === 'active' ? '<form method="POST" action="/posts/close" class="mt-1"><input type="hidden" name="post_id" value="' + post.id + '"><input type="hidden" name="post_type" value="' + type + '"><button class="btn btn-ghost btn-sm">Закрыть публикацию</button></form>' : '')
     : (showApply ? '<form method="POST" action="/posts/apply" class="mt-1"><input type="hidden" name="post_id" value="' + post.id + '"><input type="hidden" name="post_type" value="' + type + '"><label>Сообщение</label><textarea name="message" rows="2" maxlength="500" required placeholder="Коротко расскажите, чем можете помочь"></textarea><label>Ваше предложение, ScRl (необязательно)</label><input name="offered_price" type="number" min="0" step="1" placeholder="Оставьте пустым, если цена не важна"><button class="btn btn-primary btn-sm">Откликнуться</button></form>' : '');
   return '<article class="card">' +
     '<div class="row-between"><div><span class="badge badge-primary-soft">' + (type === 'demand' ? 'Спрос' : 'Предложение') + '</span> <span class="badge badge-muted">' + esc(post.category || 'Другое') + '</span> ' + demoBadge + '</div>' +
@@ -106,6 +106,13 @@ function handleCreatePost(res, user, params, type) {
   (type === 'demand' ? state.demand_posts : state.offer_posts).push(item);
   save();
   redirect(res, '/' + type + '?msg=created');
+}
+
+function handleClosePost(res,user,params) {
+  const type=params.get('post_type'), post=findPost(params.get('post_id'),type);
+  if(!post||post.user_id!==user.id||post.status!=='active') return redirect(res,'/marketplace?error=bad');
+  post.status='closed'; post.closed_at=new Date().toISOString();
+  save(); redirect(res,type==='demand'?'/demand':'/offer');
 }
 
 function handleApply(res, user, params) {
@@ -291,4 +298,4 @@ function handleReport(res,user,params) {
   save(); redirect(res,'/notifications');
 }
 
-module.exports={notify,pageBoard,pageMarketplace,handleCreatePost,handleApply,pageApplications,handleApplicationDecision,pageDeals,handleDealAction,handleDealMessage,handleDealReview,handleFavoriteToggle,pageFavorites,pageNotifications,pageProfile,handleProfileUpdate,handleReport};
+module.exports={notify,pageBoard,pageMarketplace,handleCreatePost,handleClosePost,handleApply,pageApplications,handleApplicationDecision,pageDeals,handleDealAction,handleDealMessage,handleDealReview,handleFavoriteToggle,pageFavorites,pageNotifications,pageProfile,handleProfileUpdate,handleReport};
