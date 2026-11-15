@@ -1,18 +1,17 @@
-const { state, balance, systemAccount } = require('../store');
+const { state, balance } = require('../store');
 const { ageStatus, canTrade } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
+const { recordTokenRateCandle } = require('../services/token-market');
 function pageApp(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const av = balance(user.id, 'available');
   const hd = balance(user.id, 'held');
   const vr = balance(user.id, 'vrub');
   const tradeable = canTrade(user);
-  const rateValue = Number(state.settings && state.settings.token_exchange_rate);
-  const rate = Number.isFinite(rateValue) && rateValue > 0 ? rateValue : 1;
-  const reserve = systemAccount('reserve');
-  const reserveBalance = reserve ? reserve.balance : 0;
+  const market = recordTokenRateCandle();
+  const rate = market.referenceRate;
   const recent = state.entries
     .filter(e => {
       const acc = state.accounts.find(a => a.id === e.account_id);
@@ -74,14 +73,11 @@ function pageApp(res, user, url) {
     </div>
     <section class="card mt-2">
       <div class="row-between">
-        <div><h2>Курс токена и резерв</h2><p class="muted small">Внутренний ориентир ScRl · не курс реальных денег</p></div>
+        <div><h2>Справочный курс ScRl</h2><p class="muted small">Внутренняя учебная экономика</p></div>
         <a class="btn btn-ghost btn-sm" href="/exchange">Открыть биржу</a>
       </div>
-      <div class="grid grid-2 mt-1">
-        <div><div class="muted small">Справочный курс</div><div style="font-size:23px;font-weight:700">1 ScRl = ${rate.toLocaleString('ru-RU', {minimumFractionDigits:2,maximumFractionDigits:2})} RUB*</div></div>
-        <div><div class="muted small">Резерв ScRl</div><div style="font-size:23px;font-weight:700">${reserveBalance.toLocaleString('ru-RU')} ScRl</div></div>
-      </div>
-      <p class="muted small mt-1">* Расчётное значение для внутренней симуляции. Оно не означает возможность обменять токены на реальные рубли.</p>
+      <div class="mt-1"><div class="muted small">Расчётный ориентир</div><div style="font-size:23px;font-weight:700">1 ScRl = ${rate.toLocaleString('ru-RU', {minimumFractionDigits:4,maximumFractionDigits:4})} V-RUB</div></div>
+      <p class="muted small mt-1">Курс рассчитывается по общему балансу виртуальных рублей и общему выпуску ScRl. V-RUB не является реальными рублями и не выводится из системы.</p>
     </section>`));
 }
 
@@ -108,10 +104,11 @@ function pageWallet(res, user, url) {
     <div class="grid grid-4">
       <div class="card"><div class="muted small">Доступно</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'available')} ScRl</div></div>
       <div class="card"><div class="muted small">Заблокировано</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'held')} ScRl</div></div>
-      <div class="card"><div class="muted small">Вирт. рубли</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'vrub')}</div></div>
+      <div class="card"><div class="muted small">V-RUB доступно</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'vrub')}</div></div>
+      <div class="card"><div class="muted small">V-RUB заблокировано</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'vrub_held')}</div></div>
       <div class="card"><div class="muted small">Статус</div><div style="font-size:22px;font-weight:700">${ageStatus(user.birth_date)}</div></div>
     </div>
-    <div class="row mt-1"><a class="btn btn-ghost btn-sm" href="/wallet/rub">RUB операции и статус платёжного модуля</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a></div>
+    <div class="row mt-1"><a class="btn btn-ghost btn-sm" href="/exchange">Открыть биржу ScRl / V-RUB</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a></div>
     <div class="card"><h2>История операций</h2>
       ${rows ? `<table><thead><tr><th>Дата</th><th>Тип</th><th>Комментарий</th><th style="text-align:right">Сумма</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">Пока пусто</p>'}
     </div>`));
