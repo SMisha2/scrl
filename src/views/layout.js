@@ -313,6 +313,8 @@ body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 .nav a.nav-exchange{color:var(--accent-button-text);background:var(--accent-button);border-color:var(--accent-button);font-weight:700;padding-left:14px;padding-right:14px}
 .nav a.nav-exchange:hover,.nav a.nav-exchange:focus-visible{color:var(--accent-button-text);background:var(--accent-button-hover);border-color:var(--accent-button-hover);box-shadow:0 2px 9px rgba(49,97,75,.14)}
 .nav a.nav-exchange:after{content:"↗";margin-left:8px;font-size:12px;font-weight:800;line-height:1}
+.nav a[aria-current="page"]:not(.nav-exchange){color:var(--accent-hover);background:var(--accent-soft);border-color:var(--accent);font-weight:750}
+.nav a.nav-exchange[aria-current="page"]{box-shadow:inset 0 -3px var(--warm)}
 .header-right{margin-left:auto}
 main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-height:calc(100dvh - 145px);padding-top:clamp(28px,3vw,46px);padding-bottom:clamp(48px,5vw,76px)}
 .site-footer{flex:0 0 auto;padding-top:14px;padding-bottom:22px;border-top:1px solid var(--border);color:var(--muted);font-size:11px}
@@ -393,10 +395,15 @@ main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-heigh
   .mobile-nav-primary>a:hover,.mobile-more>summary:hover{color:var(--text)}
   .mobile-nav-primary>a.nav-exchange{color:var(--accent-button-text);background:var(--accent-button);border:1px solid var(--accent-button);font-weight:750}
   .mobile-nav-primary>a.nav-exchange:after{content:"↗";margin-left:4px;font-size:10px;font-weight:800}
+  .mobile-nav-primary>a[aria-current="page"]:not(.nav-exchange),.mobile-more-panel a[aria-current="page"]{color:var(--accent-hover);background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;font-weight:800}
+  .mobile-nav-primary>a.nav-exchange[aria-current="page"]{box-shadow:inset 0 -3px var(--warm)}
   .mobile-nav-primary>a:active{background:var(--surface-soft);border-color:var(--border)}
   .mobile-more{display:block;position:relative;flex:0 0 54px;min-width:54px}
   .mobile-more>summary{width:100%;list-style:none;color:var(--accent)}
   .mobile-more>summary::-webkit-details-marker{display:none}
+  .mobile-more.has-active{flex:0 0 auto;min-width:84px;max-width:124px}
+  .mobile-more>summary.has-active{color:var(--accent-hover);background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;font-weight:800;padding-left:6px;padding-right:6px}
+  .mobile-more>summary.has-active:after{content:"⌄";margin-left:3px}
   .mobile-more-panel{position:absolute;right:0;bottom:calc(100% + 9px);display:grid;gap:0;width:min(300px,calc(100vw - 24px));max-height:min(65dvh,520px);overflow:auto;padding:6px 12px;background:var(--surface);border:1px solid var(--border);overscroll-behavior:contain}
   .mobile-more-panel a{display:flex;align-items:center;min-height:48px;padding:10px 4px;border-bottom:1px solid var(--border);color:var(--text);font-size:14px;font-weight:550;text-decoration:none}
   .mobile-more-panel a:last-child{border-bottom:0}
@@ -433,12 +440,53 @@ function autoRefreshScript() {
 }
 
 
+function activeNavScript() {
+  return `<script>
+(function(){
+  var aliases = {
+    '/market': '/orders',
+    '/wallet/rub': '/wallet',
+    '/deals': '/activity',
+    '/deal': '/activity',
+    '/favorites': '/board',
+    '/profile': '/board'
+  };
+  var currentPath = window.location.pathname.replace(/\\/+$/, '') || '/';
+  var activePath = aliases[currentPath] || currentPath;
+  var links = Array.from(document.querySelectorAll('.nav a[href], .mobile-nav a[href]'));
+  var matches = links.map(function(link) {
+    var path = new URL(link.getAttribute('href'), window.location.origin).pathname.replace(/\\/+$/, '') || '/';
+    return { link: link, path: path };
+  }).filter(function(item) {
+    return activePath === item.path || (item.path !== '/' && activePath.startsWith(item.path + '/'));
+  }).sort(function(a, b) {
+    return b.path.length - a.path.length;
+  });
+  if (!matches.length) return;
+  var bestPath = matches[0].path;
+  matches.forEach(function(item) {
+    if (item.path !== bestPath) return;
+    item.link.setAttribute('aria-current', 'page');
+    var more = item.link.closest('.mobile-more');
+    if (more) {
+      var summary = more.querySelector('summary');
+      if (summary) {
+        more.classList.add('has-active');
+        summary.classList.add('has-active');
+        summary.textContent = item.link.textContent.trim();
+        summary.setAttribute('aria-label', 'Текущий раздел: ' + item.link.textContent.trim() + '. Открыть остальные разделы');
+      }
+    }
+  });
+})();
+</script>`;
+}
+
 function layout(title, user, content) {
   const navLinks = !user ? [] : ({
     student: [
       { href: '/app', label: 'Главная' },
       { href: '/exchange', label: 'Биржа ScRl', className: 'nav-exchange' },
-      { href: '/market', label: 'Услуги' },
       { href: '/board', label: 'Доска помощи' },
       { href: '/orders', label: 'Заказы' },
       { href: '/activity', label: 'Мои дела' },
@@ -500,7 +548,7 @@ function layout(title, user, content) {
 <title>${esc(title)} · ScRl</title><style>${CSS}</style></head>
 <body><header class="header"><div class="container header-inner">
 <a href="/" class="logo"><span class="coin">S</span>ScRl</a>${nav}${right}
-</div></header><main class="container">${content}</main><footer class="container site-footer">ScRl - проект учеников РЛИ 9кл</footer>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
+</div></header><main class="container">${content}</main><footer class="container site-footer">ScRl - проект учеников РЛИ 9кл</footer>${mobileNav}${autoRefreshScript()}${themeScript()}${activeNavScript()}</body></html>`;
 }
 
 function themeScript() {
