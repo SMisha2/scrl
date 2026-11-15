@@ -46,7 +46,7 @@ test('accepts only strict keep/review decisions and known categories', () => {
   assert.equal(keep.requiresReview, false);
 
   const review = parseModelResult({
-    choices: [{ message: { content: '{"decision":"review","categories":["restricted_trade","unknown"]}' } }]
+    choices: [{ message: { content: '{"decision":"review","categories":["restricted_trade"]}' } }]
   });
   assert.equal(review.decision, 'review');
   assert.equal(review.level, 'high');
@@ -56,6 +56,9 @@ test('accepts only strict keep/review decisions and known categories', () => {
 
   assert.equal(parseModelResult({
     choices: [{ message: { content: '{"decision":"maybe","categories":[]}' } }]
+  }), null);
+  assert.equal(parseModelResult({
+    choices: [{ message: { content: '{"decision":"review","categories":["unknown"]}' } }]
   }), null);
   assert.equal(parseModelResult({
     choices: [{ message: { content: '{"decision":"keep","categories":["scam"]}' } }]
