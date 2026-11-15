@@ -220,6 +220,30 @@ th { color: var(--muted); background: var(--table-head); }
     animation-iteration-count: 1 !important;
   }
 }
+
+.header-inner{gap:14px;flex-wrap:nowrap;min-height:64px}
+.nav{flex-wrap:nowrap;align-items:center;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav a{font-size:13px;padding:7px 10px;white-space:nowrap}
+.header-right{gap:9px;flex-shrink:0}
+.header-balance{display:inline-flex;align-items:center;white-space:nowrap;text-decoration:none!important;padding:6px 11px;font-size:12px}
+.notification-link{position:relative;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--border);border-radius:10px;color:var(--text);background:var(--surface);text-decoration:none!important}
+.notification-link:hover{background:var(--surface-soft)}
+.notification-link svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.notification-count{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:#D97757;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface)}
+.user-info{max-width:190px;overflow:hidden}
+.user-info b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card{border-radius:14px}
+.btn{border-radius:10px}
+@media(max-width:1024px){.user-info{display:none}.nav a{padding:7px 8px;font-size:12px}}
+@media(max-width:760px){
+ .header-inner{gap:8px;min-height:58px;flex-wrap:nowrap}
+ .header-right{gap:6px}
+ .header-right .header-balance{display:none}
+ .notification-link{width:34px;height:34px}
+ .theme-toggle{font-size:11px;padding:6px 8px}
+ .logo{font-size:18px}
+}
 `;
 
 
@@ -245,12 +269,9 @@ function autoRefreshScript() {
 function layout(title, user, content) {
   const navItems = !user ? '' : `
     ${user.role === 'student' ? `
-      <a href="/app">Главная</a><a href="/market">Маркет</a>
-      <a href="/demand">Спрос</a><a href="/offers">Предложения</a>
-      <a href="/applications">Отклики</a><a href="/deals">Сделки</a>
-      <a href="/auctions">Аукционы</a><a href="/wallet">Кошелёк</a>
-      <a href="/notifications">Уведомления${unreadCount(user.id) ? ' (' + unreadCount(user.id) + ')' : ''}</a>
-      <a href="/favorites">Избранное</a><a href="/profile">Профиль</a>
+      <a href="/app">Главная</a><a href="/board">Доска</a>
+      <a href="/activity">Активность</a><a href="/exchange">Биржа</a>
+      <a href="/auctions">Аукционы</a>
     ` : ''}
     ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a><a href="/auctions">Аукционы</a>` : ''}
     ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/auctions">Аукционы</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/financial">Финансы</a>` : ''}
@@ -258,13 +279,19 @@ function layout(title, user, content) {
   const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
   const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
   const badge = user && user.role === 'student'
-    ? `<span class="badge badge-accent">🪙 ${balance(user.id, 'available')} ScRl</span>` : '';
+    ? `<a class="badge badge-accent header-balance" href="/wallet" title="Открыть кошелёк">🪙 ${balance(user.id, 'available')} ScRl</a>` : '';
+  const unread = user ? unreadCount(user.id) : 0;
+  const notificationLink = user ? `<a class="notification-link" href="/notifications" aria-label="Уведомления${unread ? ', непрочитанных: ' + unread : ''}" title="Уведомления">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
+    ${unread ? `<span class="notification-count">${unread > 99 ? '99+' : unread}</span>` : ''}
+  </a>` : '';
   const themeToggle = `<button class="btn btn-ghost btn-sm theme-toggle" type="button"
     data-theme-toggle aria-label="Переключить цветовую тему">Тёмная тема</button>`;
+  const roleLabel = user ? ({ student: 'Ученик', teacher: 'Учитель', admin: 'Администратор' }[user.role] || user.role) : '';
   const accountInfo = user ? `
-    <div class="user-info"><b>${esc(user.full_name)}</b><small>${esc(user.role)}</small></div>
+    <div class="user-info"><b>${esc(user.full_name)}</b><small>${esc(roleLabel)}</small></div>
     <a href="/logout" class="btn btn-ghost btn-sm">Выйти</a>` : '';
-  const right = `<div class="header-right">${badge}${themeToggle}${accountInfo}</div>`;
+  const right = `<div class="header-right">${badge}${notificationLink}${themeToggle}${accountInfo}</div>`;
 
   return `<!DOCTYPE html><html lang="ru" data-theme="light"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
