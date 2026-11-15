@@ -6,31 +6,62 @@ const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 function autoFinishAuctions() {
   let changed = false;
-  for (const a of state.auctions) {
-    if (a.status === 'active' && new Date(a.ends_at).getTime() < Date.now()) {
-      if (a.current_winner_id && a.current_bid > 0) {
-        try {
-          recordTx('auction_burn', a.current_winner_id, { auctionId: a.id, amount: a.current_bid }, [
-            { accountId: account(a.current_winner_id, 'held').id, amount: -a.current_bid, note: 'Победная ставка' },
-            { accountId: systemAccount('burn').id, amount: a.current_bid, note: 'Аукцион' }
-          ]);
-          const wonBid = state.bids.find(b => b.auction_id === a.id && b.bidder_id === a.current_winner_id && b.status === 'active');
-          if (wonBid) wonBid.status = 'won';
-        } catch (e) { console.error('auction finish:', e.message); }
+  for (const auction of state.auctions) {
+    if (auction.status !== 'active' || new Date(auction.ends_at).getTime() >= Date.now()) continue;
+
+    if (auction.current_winner_id && Number(auction.current_bid) > 0) {
+      const existing = state.transactions.find(tx => tx.kind === 'auction_burn' && tx.payload && tx.payload.auctionId === auction.id);
+      const winningBid = state.bids.find(bid => bid.auction_id === auction.id &&
+        bid.bidder_id === auction.current_winner_id && bid.amount === auction.current_bid && bid.status === 'active');
+      const held = state.accounts.find(item => item.user_id === auction.current_winner_id && item.kind === 'held');
+      const burn = systemAccount('burn');
+
+      if (!existing && (!winningBid || !held || held.balance < auction.current_bid || !burn)) {
+        auction.status = 'settlement_error';
+        auction.settlement_error = 'Не удалось подтвердить удержанную победную ставку.';
+        auction.settlement_error_at = new Date().toISOString();
+        changed = true;
+        continue;
       }
-      a.status = 'finished';
+      try {
+        if (!existing) {
+          recordTx('auction_burn', auction.current_winner_id, { auctionId: auction.id, amount: auction.current_bid }, [
+            { accountId: held.id, amount: -auction.current_bid, note: 'Победная ставка' },
+            { accountId: burn.id, amount: auction.current_bid, note: 'Аукцион ScRl' }
+          ]);
+        }
+        if (winningBid) winningBid.status = 'won';
+      } catch (error) {
+        auction.status = 'settlement_error';
+        auction.settlement_error = 'Сбой списания ставки: ' + String(error.message || 'unknown').slice(0, 160);
+        auction.settlement_error_at = new Date().toISOString();
+        changed = true;
+        continue;
+      }
+    } else if (auction.current_winner_id || Number(auction.current_bid) > 0) {
+      auction.status = 'settlement_error';
+      auction.settlement_error = 'Некорректные данные победителя или ставки.';
+      auction.settlement_error_at = new Date().toISOString();
       changed = true;
+      continue;
     }
+
+    auction.status = 'finished';
+    auction.finished_at = new Date().toISOString();
+    delete auction.settlement_error;
+    changed = true;
   }
   if (changed) save();
 }
+
+
 
 
 function pageAuctions(res, user, url) {
   autoFinishAuctions();
   const canCreate = user.role === 'teacher' || user.role === 'admin';
   const tradeable = canTrade(user);
-  const items = state.auctions.filter(a => a.status === 'active')
+  const items = state.auctions.filter(a => a.status === 'active' || (a.status === 'settlement_error' && (user.role === 'admin' || user.role === 'teacher')))
     .sort((a, b) => new Date(a.ends_at) - new Date(b.ends_at))
     .map(a => {
       const leader = state.users.find(u => u.id === a.current_winner_id);
@@ -45,7 +76,7 @@ function pageAuctions(res, user, url) {
           <div style="text-align:right"><div class="muted small">до конца</div><div>${new Date(a.ends_at).toLocaleString('ru-RU')}</div></div>
         </div>
         ${canBid ? `<form method="POST" action="/auctions/bid" class="row mt-2"><input type="hidden" name="auction_id" value="${a.id}"><input name="amount" type="number" min="${minNext}" required placeholder="мин. ${minNext}" style="flex:1;max-width:160px;margin:0"><button class="btn btn-accent btn-sm">Сделать ставку</button></form>` : ''}
-        ${canFinish ? `<form method="POST" action="/auctions/finish" class="mt-2"><input type="hidden" name="auction_id" value="${a.id}"><button class="btn btn-ghost btn-sm">Завершить сейчас (демо)</button></form>` : ''}
+        ${canFinish ? `<form method="POST" action="/auctions/finish" class="mt-2"><input type="hidden" name="auction_id" value="${a.id}"><button class="btn btn-ghost btn-sm">${a.status === 'settlement_error' ? 'Повторить завершение' : 'Завершить сейчас'}</button></form>` : ''}
       </div>`;
     }).join('');
   const finished = state.auctions.filter(x => x.status === 'finished')
