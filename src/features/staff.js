@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const { WEEKLY_LIMIT } = require('../config');
 const { state, account, balance, systemAccount, recordTx, save } = require('../store');
 const { ageStatus } = require('../session');
@@ -182,7 +183,7 @@ function handleCredit(res, admin, params) {
     return redirect(res, '/admin/users?error=ledger');
   }
   state.admin_audit_logs.push({
-    id: require('node:crypto').randomUUID(), actor_id: admin.id,
+    id: crypto.randomUUID(), actor_id: admin.id,
     action: 'student_credit_admin', target_id: userId, reason,
     created_at: new Date().toISOString()
   });
@@ -214,7 +215,7 @@ function handleDebit(res, admin, params) {
     return redirect(res, '/admin/users?error=insufficient');
   }
   state.admin_audit_logs.push({
-    id: require('node:crypto').randomUUID(), actor_id: admin.id,
+    id: crypto.randomUUID(), actor_id: admin.id,
     action: 'student_debit_admin', target_id: userId, reason,
     created_at: new Date().toISOString()
   });
@@ -236,7 +237,7 @@ function handleBlock(res, admin, params) {
   user.blocked_by = block ? admin.id : null;
   user.blocked_at = block ? new Date().toISOString() : null;
   state.admin_audit_logs.push({
-    id: require('node:crypto').randomUUID(), actor_id: admin.id,
+    id: crypto.randomUUID(), actor_id: admin.id,
     action: block ? 'user_blocked' : 'user_unblocked',
     target_id: user.id, reason: 'Изменение статуса аккаунта модератором',
     created_at: new Date().toISOString()
