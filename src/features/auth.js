@@ -157,7 +157,7 @@ function doRegister(req, res, params) {
       console.error('Registration rollback save failed:', saveError.message);
     }
     console.error('Registration bonus failed:', error.message);
-    return redirect(res, '/register?error=ledger');
+    return redirect(res, error.code === 'backing_limit' ? '/register?error=backing_limit' : '/register?error=ledger');
   }
 
   const token = crypto.randomUUID();
