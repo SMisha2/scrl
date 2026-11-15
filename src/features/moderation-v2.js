@@ -5,7 +5,7 @@ const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { notify } = require('../utils/notifications');
 const { analyseText } = require('../services/moderation-rules');
-const { getApiConfig } = require('../services/ai-moderation');
+const { analyseSubmission, getApiConfig } = require('../services/ai-moderation');
 
 function audit(admin, action, targetId, reason) {
   state.admin_audit_logs.push({
@@ -176,7 +176,7 @@ function pageModeration(res, user, url) {
       '<div class="card"><p class="muted">Действий пока нет.</p></div>')));
 }
 
-function handleModerationScan(res, user) {
+async function handleModerationScan(res, user) {
   if (user.role !== 'admin') return redirect(res, '/');
   const sources = [
     ...state.demand_posts.filter(item => item.status === 'active').map(item => ({ kind: 'post', postKind: 'demand', item })),
@@ -188,7 +188,7 @@ function handleModerationScan(res, user) {
   let createdCases = 0;
 
   for (const source of sources) {
-    const result = analyseText([
+    const result = await analyseSubmission([
       source.item.title,
       source.item.description,
       source.item.category
