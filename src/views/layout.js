@@ -39,7 +39,7 @@ h1{margin-bottom:5px;font-size:30px;line-height:1.2;font-weight:650;letter-spaci
 h2{margin-bottom:8px;font-size:17px;line-height:1.3;font-weight:650;letter-spacing:-.02em}
 h3{margin-bottom:6px;font-size:15px;line-height:1.35;font-weight:650}
 p{margin-bottom:0}
- .card{margin-bottom:18px;padding:14px 0;background:transparent;border:0;border-bottom:1px solid var(--border);border-radius:0;box-shadow:none}
+.card{margin-bottom:16px;padding:12px 0;background:transparent;border:0;border-bottom:1px solid var(--border);border-radius:0;box-shadow:none}
 .card.balance{background:transparent;border:0}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:7px 12px;border:1px solid var(--border);border-radius:3px;font-size:13px;font-weight:550;cursor:pointer;text-decoration:none!important;transition:background .12s ease,border-color .12s ease,color .12s ease;font-family:inherit}
 .btn-primary{background:var(--accent-button);border-color:var(--accent-button);color:var(--accent-button-text)}
@@ -65,7 +65,8 @@ label{display:block;margin-bottom:3px;color:var(--muted);font-size:12px;font-wei
 .badge-muted{color:var(--muted)}
 :root[data-theme="dark"] .badge-success{color:#9dc4a9}
 .muted{color:var(--muted)}
-.small{font-size:12px}\n.card>summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600;list-style:none}\n.card>summary::-webkit-details-marker{display:none}\n.card[open]>summary{margin-bottom:12px}
+.small{font-size:12px}
+.card>summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600;list-style:none}\n.card>summary::-webkit-details-marker{display:none}\n.card[open]>summary{margin-bottom:12px}
 .accent{color:var(--warm)}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
