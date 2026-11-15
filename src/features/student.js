@@ -6,89 +6,95 @@ const { layout } = require('../views/layout');
 const { recordTokenRateCandle } = require('../services/token-market');
 function pageApp(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
-  const av = balance(user.id, 'available');
-  const hd = balance(user.id, 'held');
-  const vr = balance(user.id, 'vrub');
+  const available = balance(user.id, 'available');
+  const held = balance(user.id, 'held');
+  const vrub = balance(user.id, 'vrub');
   const tradeable = canTrade(user);
   const market = recordTokenRateCandle();
-  const rate = market.referenceRate;
+
+  const transactionLabels = {
+    signup_bonus: 'Стартовый бонус',
+    credit_teacher: 'Начисление учителя',
+    credit_admin: 'Начисление школы',
+    deal_settlement: 'Оплата по сделке',
+    deal_escrow: 'Резерв сделки',
+    deal_escrow_refund: 'Возврат резерва',
+    transfer: 'Перевод',
+    exchange_buy: 'Покупка ScRl',
+    exchange_sell: 'Продажа ScRl',
+    burn_commission: 'Комиссия биржи'
+  };
   const recent = state.entries
-    .filter(e => {
-      const acc = state.accounts.find(a => a.id === e.account_id);
-      return acc && acc.user_id === user.id && acc.kind === 'available' && e.amount !== 0;
+    .filter(entry => {
+      const acc = state.accounts.find(item => item.id === entry.account_id);
+      return acc && acc.user_id === user.id && acc.kind === 'available' && entry.amount !== 0;
     })
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 6)
-    .map(e => {
-      const tx = state.transactions.find(t => t.id === e.tx_id);
-      return `<li class="row-between" style="padding:9px 0;border-bottom:1px solid var(--border);font-size:14px">
-        <span class="muted">${esc(tx ? tx.kind : 'Операция')}</span>
-        <b class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${e.amount} ScRl</b></li>`;
+    .sort((x, y) => y.created_at.localeCompare(x.created_at))
+    .slice(0, 5)
+    .map(entry => {
+      const tx = state.transactions.find(item => item.id === entry.tx_id);
+      const label = transactionLabels[tx?.kind] || 'Операция';
+      return '<li class="home-list-row"><span>' + esc(label) + '</span><b class="' +
+        (entry.amount > 0 ? 'amount-positive' : 'amount-negative') + '">' +
+        (entry.amount > 0 ? '+' : '') + Number(entry.amount).toLocaleString('ru-RU') + ' ScRl</b></li>';
     }).join('');
-  const activeLabels = { accepted: 'Принята', in_progress: 'В работе', awaiting_confirmation: 'Ждёт подтверждения' };
-  const activeOrders = (state.deals || [])
-    .filter(deal => (deal.buyer_id === user.id || deal.seller_id === user.id) && ['accepted', 'in_progress', 'awaiting_confirmation'].includes(deal.status))
+
+  const statusLabels = {
+    accepted: 'Принята',
+    in_progress: 'В работе',
+    awaiting_confirmation: 'Ждёт подтверждения'
+  };
+  const activeDeals = (state.deals || [])
+    .filter(deal => (deal.buyer_id === user.id || deal.seller_id === user.id) &&
+      ['accepted', 'in_progress', 'awaiting_confirmation'].includes(deal.status))
     .sort((x, y) => String(y.updated_at || y.created_at).localeCompare(String(x.updated_at || x.created_at)))
-    .slice(0, 4)
+    .slice(0, 5)
     .map(deal => {
-      const collection = deal.post_kind === 'demand' ? state.demand_posts : state.offer_posts;
-      const post = collection.find(item => item.id === deal.post_id);
+      const posts = deal.post_kind === 'demand' ? state.demand_posts : state.offer_posts;
+      const post = posts.find(item => item.id === deal.post_id);
       const otherId = deal.buyer_id === user.id ? deal.seller_id : deal.buyer_id;
       const other = state.users.find(item => item.id === otherId);
       return '<li class="home-list-row"><a href="/deal?id=' + encodeURIComponent(deal.id) + '">' +
         esc(post ? post.title : 'Договорённость') + '</a><span class="muted small">' +
-        esc(activeLabels[deal.status] || 'Активна') + ' · ' + esc(other ? other.full_name : 'Участник') + '</span></li>';
+        esc(statusLabels[deal.status] || 'Активна') + ' · ' +
+        esc(other ? other.full_name : 'Участник') + '</span></li>';
     }).join('');
 
-  sendHtml(res, layout('Главная', user, `
-    ${flashBox(url)}
-    <div class="row-between" style="margin-bottom:16px;align-items:end">
-      <div><h1 style="margin-bottom:2px">Главная</h1><p class="muted">Попроси о помощи или поделись тем, что умеешь.</p></div>
-      <span class="badge badge-primary-soft">Личный кабинет</span>
-    </div>
-    <section class="card balance home-wallet">
-      <div class="row-between">
-        <div>
-          <div class="muted small">Ваш кошелёк · доступно</div>
-          <div style="font-size:34px;font-weight:750;letter-spacing:-1px;margin:5px 0">${av.toLocaleString('ru-RU')} ScRl</div>
-          <div class="muted small">В резерве сделок: ${hd.toLocaleString('ru-RU')} ScRl</div>
-        </div>
-        <a class="btn btn-primary" href="/wallet">Открыть кошелёк <span aria-hidden="true">→</span></a>
-      </div>
-      <div class="grid grid-3 mt-2">
-        <div><div class="muted small">Доступно</div><b>${av.toLocaleString('ru-RU')} ScRl</b></div>
-        <div><div class="muted small">Заблокировано</div><b>${hd.toLocaleString('ru-RU')} ScRl</b></div>
-        <div><div class="muted small">Виртуальные рубли</div><b>${vr.toLocaleString('ru-RU')} V-RUB</b></div>
-      </div>
-    </section>
-    ${!tradeable ? `<div class="alert alert-info">Покупки и аукционы доступны с 14 лет. Вы можете просматривать доску и получать токены.</div>` : ''}
-    <div class="grid grid-4 mt-2">
-      <a href="/board" class="hub-link"><span class="hub-kicker">Сообщество</span><h2>Доска помощи</h2><p class="muted small">Ищу помощь и предлагаю свои навыки</p></a>
-      <a href="/activity" class="hub-link"><span class="hub-kicker">Договорённости</span><h2>Моя активность</h2><p class="muted small">Отклики, сделки и сообщения</p></a>
-      <a href="/exchange" class="hub-link"><span class="hub-kicker">Кошелёк</span><h2>Биржа ScRl</h2><p class="muted small">ScRl и виртуальные рубли</p></a>
-      <a href="/auctions" class="hub-link"><span class="hub-kicker">События</span><h2>Школьные аукционы</h2><p class="muted small">Внутренние ставки ScRl</p></a>
-    </div>
-    <div class="grid grid-2 mt-2">
-      <section class="card">
-        <div class="row-between"><h2>Последние операции</h2><a class="small" href="/wallet">В кошелёк →</a></div>
-        ${recent ? `<ul style="list-style:none">${recent}</ul>` : '<p class="muted small">Операций пока нет.</p>'}
-      </section>
-      <section class="card">
-        <div class="row-between"><h2>Активные сделки</h2><a class="small" href="/activity#deals">Все →</a></div>
-        ${activeOrders ? `<ul style="list-style:none">${activeOrders}</ul>` : '<p class="muted small">Нет активных заказов.</p>'}
-      </section>
-    </div>
-    <section class="card mt-2">
-      <div class="row-between">
-        <div><h2>Текущее соотношение ScRl / V-RUB</h2><p class="muted small">Автоматически по балансам участников</p></div>
-        <a class="btn btn-ghost btn-sm" href="/exchange">Открыть биржу</a>
-      </div>
-      <div class="mt-1"><div class="muted small">Все V-RUB участников / ScRl в обращении</div><div style="font-size:23px;font-weight:700">1 ScRl = ${rate.toLocaleString('ru-RU', {minimumFractionDigits:4,maximumFractionDigits:6})} V-RUB</div></div>
-      <p class="muted small mt-1">Соотношение пересчитывается при изменении общей массы валют. Последняя цена сделки отображается отдельно на бирже. V-RUB — виртуальная единица, не реальные рубли.</p>
-    </section>`));
+  const titleName = String(user.full_name || 'ученик').trim().split(/\s+/)[0] || 'ученик';
+  const content = flashBox(url) +
+    '<header class="home-greeting"><h1>Привет, ' + esc(titleName) + '</h1>' +
+    '<p>Что тебе нужно сегодня?</p></header>' +
+    '<section class="home-balances" aria-label="Баланс">' +
+      '<div class="home-balance"><small>Доступно</small><strong>' + available.toLocaleString('ru-RU') + ' ScRl</strong>' +
+        '<span class="muted small">' + held.toLocaleString('ru-RU') + ' ScRl в резерве</span></div>' +
+      '<div class="home-balance home-balance-secondary"><small>Виртуальные рубли</small><strong>' +
+        vrub.toLocaleString('ru-RU') + ' V-RUB</strong></div>' +
+    '</section>' +
+    (!tradeable ? '<p class="muted small" style="margin-bottom:18px">Платные сделки и аукционы доступны с 14 лет. Бесплатная помощь доступна всем участникам.</p>' : '') +
+    '<nav class="home-actions" aria-label="Основные действия">' +
+      '<a class="btn btn-primary" href="/board">Открыть доску помощи</a>' +
+      '<a href="/activity">Мои отклики</a>' +
+      '<a href="/wallet">Кошелёк</a>' +
+    '</nav>' +
+    '<div class="home-sections">' +
+      '<section><h2 class="home-section-title">Текущие договорённости</h2>' +
+        (activeDeals ? '<ul class="home-list">' + activeDeals + '</ul>' :
+          '<p class="muted small" style="padding:12px 0">Пока нет активных договорённостей.</p>') +
+        '<a class="small" href="/activity#deals">Все договорённости →</a>' +
+      '</section>' +
+      '<section><h2 class="home-section-title">Последние операции</h2>' +
+        (recent ? '<ul class="home-list">' + recent + '</ul>' :
+          '<p class="muted small" style="padding:12px 0">Операций пока нет.</p>') +
+        '<a class="small" href="/wallet">История кошелька →</a>' +
+      '</section>' +
+    '</div>' +
+    '<section class="home-rate"><div class="row-between"><div><span class="muted small">Текущий ориентир</span>' +
+      '<div><strong>1 ScRl = ' + Number(market.referenceRate || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) +
+      ' V-RUB</strong></div></div><a class="small" href="/exchange">Биржа →</a></div>' +
+      '<p class="muted small" style="margin-top:5px">V-RUB — внутренняя виртуальная единица, не реальные деньги.</p></section>';
+
+  sendHtml(res, layout('Главная', user, content));
 }
-
-
 
 function pageWallet(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
