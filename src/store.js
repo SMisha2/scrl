@@ -115,7 +115,7 @@ function ensureCollections() {
     'funding_sources', 'funding_reserves', 'payment_intents', 'payout_requests',
     'provider_events', 'partner_settlements', 'refund_operations',
     'withdrawal_eligibility_checks', 'guardian_links', 'consent_records',
-    'financial_audit_logs', 'token_rate_candles', 'vrub_ledger_entries'
+    'financial_audit_logs', 'token_rate_candles', 'token_market_trades', 'vrub_ledger_entries'
   ];
   let changed = false;
   for (const name of collections) {
@@ -127,11 +127,20 @@ function ensureCollections() {
   if (!state.settings || typeof state.settings !== 'object') {
     state.settings = {
       payments_mode: 'disabled',
-      token_exchange_rate: 1,
+      token_exchange_rate: 0.05,
       token_exchange_rate_version: 1,
+      token_target_rate: 0.05,
       marketplace_commission_percent: 0,
       teacher_weekly_limit: 500
     };
+    changed = true;
+  }
+  if (!Number.isFinite(Number(state.settings.token_target_rate)) || Number(state.settings.token_target_rate) <= 0) {
+    state.settings.token_target_rate = 0.05;
+    changed = true;
+  }
+  if (!Number.isFinite(Number(state.settings.token_exchange_rate_version))) {
+    state.settings.token_exchange_rate_version = 1;
     changed = true;
   }
   // Every student has a separate V-RUB escrow account for exchange listings.
@@ -509,6 +518,23 @@ function recordTx(kind, initiator, payload, entries) {
   }
   const totalDelta = resolved.reduce((sum, item) => sum + item.amount, 0);
   if (!Number.isSafeInteger(totalDelta) || totalDelta !== 0) throw new Error('Unbalanced transaction');
+
+  // All new ScRl issued from the system reserve must fit under the current
+  // V-RUB-backed circulation cap. Transfers between students are unaffected.
+  if (['signup_bonus', 'credit_teacher', 'credit_admin'].includes(kind)) {
+    const issueAmount = resolved
+      .filter(item => item.account.user_id && ['available', 'held'].includes(item.account.kind) && item.amount > 0)
+      .reduce((sum, item) => sum + item.amount, 0);
+    if (issueAmount > 0) {
+      const capacity = require('./services/token-market').canIssueScRl(issueAmount);
+      if (!capacity.allowed) {
+        const error = new Error('ScRl issuance exceeds the V-RUB-backed circulation limit');
+        error.code = 'backing_limit';
+        error.capacity = capacity;
+        throw error;
+      }
+    }
+  }
 
   const snapshot = {
     accounts: JSON.stringify(state.accounts),
