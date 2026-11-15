@@ -142,6 +142,22 @@ function getTokenMarketStats(now = new Date()) {
   };
 }
 
+const SIGNUP_BONUS_VALUE_VRUB = 5; // Preserves the value of 100 ScRl at the original 0.05 target rate.
+
+function calculateSignupBonusScRl(rateAtRegistration = null, stats = getTokenMarketStats()) {
+  const suppliedRate = safeNumber(rateAtRegistration, 0);
+  const liveRate = suppliedRate > 0 ? suppliedRate :
+    (safeNumber(stats.referenceRate, 0) > 0
+      ? safeNumber(stats.referenceRate)
+      : safeNumber(stats.targetRate, TARGET_RATE_DEFAULT));
+  if (liveRate <= 0) return 0;
+
+  const desiredWholeTokens = Math.floor(SIGNUP_BONUS_VALUE_VRUB / liveRate);
+  const reserve = Math.max(0, safeNumber((systemAccount('reserve') || {}).balance));
+  const capacity = Math.max(0, safeNumber(stats.remainingCapacityScRl));
+  return Math.max(0, Math.min(desiredWholeTokens, reserve, capacity));
+}
+
 function calculateBurnCommission(grossScRl, stats = getTokenMarketStats()) {
   const amount = Math.floor(safeNumber(grossScRl));
   if (amount <= 1) return 0;
@@ -287,6 +303,7 @@ module.exports = {
   recordTokenRateCandle,
   recordTokenMarketTrade,
   calculateBurnCommission,
+  calculateSignupBonusScRl,
   canIssueScRl,
   getBurnFeeRate
 };
