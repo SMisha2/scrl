@@ -39,7 +39,8 @@ test('account removal anonymizes sign-in details but keeps the user id for histo
     passwordHash: 'new-unusable-hash'
   });
   assert.equal(user.id, 'u4');
-  assert.equal(user.role, 'deleted');
+  assert.equal(user.role, 'student');
+  assert.ok(user.deleted_at);
   assert.equal(user.email, 'deleted+u4@deleted.invalid');
   assert.equal(user.full_name, 'Удалённый пользователь');
   assert.equal(user.class_name, null);
