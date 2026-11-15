@@ -3,12 +3,12 @@ const { PORT, DATA_FILE } = require('./config');
 const { sessions, getSessionUser } = require('./session');
 const { readBody, sendHtml, redirect, esc } = require('./utils/http');
 const { layout } = require('./views/layout');
-const { pageLogin, doLogin, pageRegister, doRegister, doLogout } = require('./features/auth');
+const { pageLogin, doLogin, pageStaffLogin, doStaffLogin, pageRegister, doRegister, doLogout } = require('./features/auth');
 const { pageApp, pageWallet } = require('./features/student');
 const { pageMarket, handleCreateListing, handleDeleteListing, handleBuyListing, pageOrders, handleDeliver, handleOrderDispute, handleConfirm } = require('./features/market');
 const { pageAuctions, handleCreateAuction, handleBid, handleFinishAuction } = require('./features/auctions');
 const { pageExchange, handleExchangeSell, handleExchangeCancel, handleExchangeBuy } = require('./features/exchange');
-const { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock } = require('./features/staff');
+const { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock, handleRole, handleDeleteUser } = require('./features/staff');
 const community = require('./features/community');
 const assistant = require('./features/assistant');
 const moderation = require('./features/moderation-v2');
@@ -45,6 +45,8 @@ const server = http.createServer(async (req, res) => {
 
     if (path === '/login' && method === 'GET') return pageLogin(res, user, url);
     if (path === '/login' && method === 'POST') return doLogin(req, res, params);
+    if (path === '/staff/login' && method === 'GET') return pageStaffLogin(res, user, url);
+    if (path === '/staff/login' && method === 'POST') return doStaffLogin(req, res, params);
     if (path === '/register' && method === 'GET') return pageRegister(res, user, url);
     if (path === '/register' && method === 'POST') return doRegister(req, res, params);
     if (path === '/logout') return doLogout(req, res);
@@ -89,6 +91,8 @@ const server = http.createServer(async (req, res) => {
     if (path === '/admin/credit' && method === 'POST') return handleCredit(res, user, params);
     if (path === '/admin/debit' && method === 'POST') return handleDebit(res, user, params);
     if (path === '/admin/block' && method === 'POST') return handleBlock(res, user, params);
+    if (path === '/admin/role' && method === 'POST') return handleRole(res, user, params);
+    if (path === '/admin/delete' && method === 'POST') return handleDeleteUser(res, user, params);
 
     // Demand Board, Offer Board, applications and Deal Engine.
     if (path === '/board' && method === 'GET') return community.pageCommunity(res, user, url);

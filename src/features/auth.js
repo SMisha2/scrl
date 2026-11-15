@@ -49,39 +49,57 @@ function sessionCookie(req, token, maxAge) {
   return 'scrl_session=' + token + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + maxAge + (secure ? '; Secure' : '');
 }
 
-function pageLogin(res, user, url) {
+function pageLogin(res, user, url, staffOnly = false) {
   if (user) return redirect(res, '/');
-  const quick = DEMO_MODE ? [
-    ['ivan@scrl.demo', 'Иван (ученик)'],
-    ['masha@scrl.demo', 'Мария (ученик)'],
-    ['teacher@scrl.demo', 'Учитель'],
-    ['admin@scrl.demo', 'Админ']
-  ].map(([email, label]) => '<form method="POST" action="/login"><input type="hidden" name="email" value="' + email + '"><input type="hidden" name="password" value="password123"><button class="btn btn-ghost btn-sm btn-block" style="margin:0">' + label + '</button></form>').join('') : '';
-
-  sendHtml(res, layout('Вход', null,
-    '<div class="card" style="max-width:440px;margin:40px auto"><h1>Вход в ScRl</h1>' +
-    '<p class="muted" style="margin-bottom:16px">Школьная экономика</p>' + flashBox(url) +
-    '<form method="POST" action="/login"><label>Email</label><input name="email" type="email" required autocomplete="username" placeholder="name@example.com">' +
+  const action = staffOnly ? '/staff/login' : '/login';
+  const title = staffOnly ? 'Вход для сотрудников' : 'Вход';
+  const quickUsers = staffOnly
+    ? [['teacher@scrl.demo', 'Учитель'], ['admin@scrl.demo', 'Администратор']]
+    : [['ivan@scrl.demo', 'Иван (ученик)'], ['masha@scrl.demo', 'Мария (ученик)'],
+       ['teacher@scrl.demo', 'Учитель'], ['admin@scrl.demo', 'Администратор']];
+  const quick = DEMO_MODE ? quickUsers.map(([email, label]) =>
+    '<form method="POST" action="' + action + '"><input type="hidden" name="email" value="' + email +
+    '"><input type="hidden" name="password" value="password123"><button class="btn btn-ghost btn-sm btn-block" style="margin:0">' +
+    label + '</button></form>').join('') : '';
+  const staffNote = staffOnly
+    ? '<p class="muted small mt-2">Роль учителя выдаёт администратор. Входите по email и паролю своего аккаунта ScRl.</p>'
+    : '<p class="text-center mt-2"><a href="/staff/login">Вход для учителей и сотрудников</a></p>';
+  sendHtml(res, layout(title, null,
+    '<div class="card" style="max-width:440px;margin:40px auto"><h1>' +
+    (staffOnly ? 'Вход для учителей' : 'Вход в ScRl') + '</h1>' +
+    '<p class="muted" style="margin-bottom:16px">ScRl · школьная платформа</p>' + flashBox(url) +
+    '<form method="POST" action="' + action + '"><label>Email</label><input name="email" type="email" required autocomplete="username" placeholder="name@example.com">' +
     '<label>Пароль</label><input name="password" type="password" required autocomplete="current-password">' +
     '<button type="submit" class="btn btn-primary btn-block">Войти</button></form>' +
-    '<p class="text-center mt-2">Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>' +
-    (DEMO_MODE ? '<hr><p class="muted small">Демо-вход (только для тестовой среды, пароль password123):</p><div class="grid-2 mt-1">' + quick + '</div>' : '') +
+    staffNote +
+    (staffOnly ? '<p class="text-center mt-2"><a href="/login">Вход для учеников</a></p>' :
+      '<p class="text-center mt-2">Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>') +
+    (DEMO_MODE ? '<hr><p class="muted small">Демо-вход (только для тестовой среды):</p><div class="grid-2 mt-1">' + quick + '</div>' : '') +
     '</div>'));
 }
 
-function doLogin(req, res, params) {
+function pageStaffLogin(res, user, url) {
+  return pageLogin(res, user, url, true);
+}
+
+function doLogin(req, res, params, staffOnly = false) {
   const email = (params.get('email') || '').trim().toLowerCase();
   const password = params.get('password') || '';
-  if (loginRateLimited(req, email)) return redirect(res, '/login?error=wrong');
+  const loginPath = staffOnly ? '/staff/login' : '/login';
+  if (loginRateLimited(req, email)) return redirect(res, loginPath + '?error=wrong');
   const isDemoAccount = email.endsWith('@scrl.demo');
   const user = state.users.find(item => item.email === email);
   if (!user || (isDemoAccount && !DEMO_MODE) || !verifyPassword(password, user.password_hash)) {
     recordLoginFailure(req, email);
-    return redirect(res, '/login?error=wrong');
+    return redirect(res, loginPath + '?error=wrong');
   }
   const ip = String(req.socket?.remoteAddress || 'unknown').slice(0, 80);
   loginFailures.delete(ip + '|' + email);
-  if (user.is_blocked) return redirect(res, '/login?error=blocked_acc');
+  if (user.deleted_at || user.role === 'deleted') return redirect(res, loginPath + '?error=deleted_acc');
+  if (user.is_blocked) return redirect(res, loginPath + '?error=blocked_acc');
+  if (staffOnly && !['teacher', 'admin'].includes(user.role)) {
+    return redirect(res, loginPath + '?error=wrong_role');
+  }
 
   if (!user.password_hash.startsWith('scrypt$')) {
     user.password_hash = hashPassword(password);
@@ -97,6 +115,10 @@ function doLogin(req, res, params) {
     'Cache-Control': 'no-store'
   });
   res.end();
+}
+
+function doStaffLogin(req, res, params) {
+  return doLogin(req, res, params, true);
 }
 
 function pageRegister(res, user, url) {
@@ -195,4 +217,4 @@ function doLogout(req, res) {
   res.end();
 }
 
-module.exports = { pageLogin, doLogin, pageRegister, doRegister, doLogout };
+module.exports = { pageLogin, doLogin, pageStaffLogin, doStaffLogin, pageRegister, doRegister, doLogout };

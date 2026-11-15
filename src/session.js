@@ -32,7 +32,10 @@ function getSessionUser(req) {
     return null;
   }
   const user = state.users.find(item => item.id === userId) || null;
-  if (!user) sessions.delete(token);
+  if (!user || user.deleted_at || user.role === 'deleted') {
+    sessions.delete(token);
+    return null;
+  }
   return user;
 }
 
