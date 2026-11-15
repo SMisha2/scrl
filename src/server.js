@@ -73,6 +73,7 @@ const server = http.createServer(async (req, res) => {
     if (path === '/offer' && method === 'GET') return community.pageBoard(res, user, url, 'offer');
     if (path === '/demand/create' && method === 'POST') return community.handleCreatePost(res, user, params, 'demand');
     if (path === '/offer/create' && method === 'POST') return community.handleCreatePost(res, user, params, 'offer');
+    if (path === '/posts/close' && method === 'POST') return community.handleClosePost(res, user, params);
     if (path === '/posts/apply' && method === 'POST') return community.handleApply(res, user, params);
     if (path === '/applications' && method === 'GET') return community.pageApplications(res, user, url);
     if (path === '/applications/decision' && method === 'POST') return community.handleApplicationDecision(res, user, params);
