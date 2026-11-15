@@ -2,8 +2,8 @@ const { balance } = require('../store');
 const { esc } = require('../utils/http');
 const { unreadCount } = require('../utils/notifications');
 const CSS = `
-:root{color-scheme:light;--page-bg:#fff;--surface:#fff;--surface-soft:#f7f8f5;--text:#252a27;--muted:#777e78;--border:#e6e9e4;--accent:#285b49;--accent-hover:#1e4738;--accent-soft:#edf3ef;--warm:#806441;--danger:#a34843}
-:root[data-theme="dark"]{color-scheme:dark;--page-bg:#171a18;--surface:#1d221f;--surface-soft:#242a26;--text:#e7ebe7;--muted:#a0a7a1;--border:#353d37;--accent:#91b5a1;--accent-hover:#a9c8b7;--accent-soft:#25352c;--warm:#d1b48b;--danger:#df9892}
+:root{color-scheme:light;--page-bg:#f7f6f1;--surface:#fffefa;--surface-soft:#edf2f5;--text:#35424c;--muted:#77838b;--border:#e3e7e8;--accent:#718fa9;--accent-hover:#5f7f9b;--accent-soft:#e8eff4;--accent-button:#dce7ef;--accent-button-hover:#cfdeea;--accent-button-text:#415b70;--warm:#9b896f;--danger:#b77d78}
+:root[data-theme="dark"]{color-scheme:dark;--page-bg:#20282e;--surface:#263139;--surface-soft:#2d3a43;--text:#e7edf0;--muted:#a4b1b8;--border:#3b4850;--accent:#a2bbce;--accent-hover:#bed0dd;--accent-soft:#344651;--accent-button:#3b5363;--accent-button-hover:#466174;--accent-button-text:#f0f4f5;--warm:#c9b79a;--danger:#d7a09a}
 *{box-sizing:border-box}
 html{background:var(--page-bg);scroll-behavior:smooth}
 body{margin:0;min-height:100vh;background:var(--page-bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:15px;line-height:1.55;letter-spacing:0;-webkit-font-smoothing:antialiased}
@@ -42,11 +42,10 @@ p{margin-bottom:0}
 .card{margin-bottom:22px;padding:16px 0;background:transparent;border:0;border-bottom:1px solid var(--border);border-radius:0;box-shadow:none}
 .card.balance{background:transparent;border:0}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:7px 12px;border:1px solid var(--border);border-radius:3px;font-size:13px;font-weight:550;cursor:pointer;text-decoration:none!important;transition:background .12s ease,border-color .12s ease,color .12s ease;font-family:inherit}
-.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff}
-:root[data-theme="dark"] .btn-primary{color:#15221b}
-.btn-accent{background:var(--warm);border-color:var(--warm);color:#fff}
-.btn-accent:hover{filter:brightness(.94)}
+.btn-primary{background:var(--accent-button);border-color:var(--accent-button);color:var(--accent-button-text)}
+.btn-primary:hover{background:var(--accent-button-hover);border-color:var(--accent-button-hover);color:var(--accent-button-text)}
+.btn-accent{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent-hover)}
+.btn-accent:hover{background:var(--accent-button);border-color:var(--accent-button);color:var(--accent-button-text)}
 .btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
 .btn-ghost:hover{background:var(--surface-soft);border-color:var(--muted)}
 .btn-danger{background:var(--danger);border-color:var(--danger);color:#fff}
@@ -113,6 +112,14 @@ tbody tr:last-child td{border-bottom:0}
 .home-balance strong{font-size:25px;font-weight:650;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .home-balance-secondary strong{font-size:19px}
 .home-actions{display:flex;align-items:center;gap:22px;margin:0 0 32px}
+.earn-guide{padding:18px 20px;margin:0 0 28px;border-radius:10px;background:var(--accent-soft)}
+.earn-guide-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+.earn-guide-heading h2{margin:0;font-size:15px}
+.earn-guide-heading p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.earn-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px;margin-top:15px}
+.earn-guide-item b{display:block;margin-bottom:3px;color:var(--text);font-size:13px;font-weight:650}
+.earn-guide-item p{color:var(--muted);font-size:12px;line-height:1.55}
+.earn-guide-item a{font-weight:600}
 .home-actions a{font-size:14px;font-weight:600}
 .home-sections{display:grid;grid-template-columns:1.2fr .8fr;gap:52px}
 .home-section-title{padding-bottom:9px;border-bottom:1px solid var(--border);margin-bottom:0;font-size:13px;font-weight:650}
@@ -179,6 +186,9 @@ tbody tr:last-child td{border-bottom:0}
  .home-balance strong{font-size:22px}
  .home-balance-secondary strong{font-size:17px}
  .home-actions{gap:17px;flex-wrap:wrap;margin-bottom:24px}
+ .earn-guide{padding:16px;margin-bottom:24px}
+ .earn-guide-grid{grid-template-columns:1fr;gap:12px}
+ .earn-guide-heading{align-items:flex-start;flex-direction:column;gap:5px}
  .home-sections{grid-template-columns:1fr;gap:26px}
  .board-toolbar{align-items:stretch}
  .board-toolbar form{align-items:stretch;display:grid;grid-template-columns:1fr 1fr}
@@ -219,9 +229,8 @@ function autoRefreshScript() {
 function layout(title, user, content) {
   const navItems = !user ? '' : `
     ${user.role === 'student' ? `
-      <a href="/app">Главная</a><a href="/board">Доска</a>
-      <a href="/activity">Активность</a><a href="/exchange">Биржа</a>
-      <a href="/auctions">Аукционы</a>
+      <a href="/app">Главная</a><a href="/board">Найти помощь</a>
+      <a href="/activity">Мои дела</a><a href="/wallet">Кошелёк</a>
     ` : ''}
     ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a><a href="/teacher/impact">Пульс класса</a><a href="/auctions">Аукционы</a>` : ''}
     ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/admin/impact">Пульс лицея</a><a href="/admin/market">Курс ScRl</a><a href="/auctions">Аукционы</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/financial">Финансы</a>` : ''}
