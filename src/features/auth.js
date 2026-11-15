@@ -119,40 +119,55 @@ function doRegister(req, res, params) {
   const className = (params.get('class_name') || '').trim().slice(0, 20);
   const birthDate = params.get('birth_date') || '';
 
-  if (!fullName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
+  if (!fullName || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254 ||
       email.endsWith('@scrl.demo') || password.length < 8 || password.length > 1024 ||
       !className || ageStatus(birthDate) === 'unknown') {
     return redirect(res, '/register?error=fields');
   }
   if (state.users.some(item => item.email === email)) return redirect(res, '/register?error=email');
 
+  const reserve = systemAccount('reserve');
+  if (!reserve || !Number.isSafeInteger(reserve.balance) || reserve.balance < 100) {
+    return redirect(res, '/register?error=ledger');
+  }
+
   const id = crypto.randomUUID();
-  state.users.push({
+  const createdAt = new Date().toISOString();
+  const user = {
     id, email, password_hash: hashPassword(password), role: 'student',
     full_name: fullName, class_name: className, birth_date: birthDate,
-    is_blocked: false, created_at: new Date().toISOString()
-  });
-  account(id, 'available');
+    is_blocked: false, created_at: createdAt
+  };
+  state.users.push(user);
+  const available = account(id, 'available');
   account(id, 'held');
   account(id, 'vrub').balance = 1000;
-  save();
 
-  const reserve = systemAccount('reserve');
-  if (!reserve) throw new Error('Reserve account is not configured');
-  recordTx('signup_bonus', id, { amount: 100 }, [
-    { accountId: reserve.id, amount: -100 },
-    { accountId: account(id, 'available').id, amount: 100 }
-  ]);
+  try {
+    recordTx('signup_bonus', id, { amount: 100 }, [
+      { accountId: reserve.id, amount: -100 },
+      { accountId: available.id, amount: 100 }
+    ]);
+  } catch (error) {
+    state.users = state.users.filter(item => item.id !== id);
+    state.accounts = state.accounts.filter(item => item.user_id !== id);
+    try { save(); } catch (saveError) {
+      console.error('Registration rollback save failed:', saveError.message);
+    }
+    console.error('Registration bonus failed:', error.message);
+    return redirect(res, '/register?error=ledger');
+  }
 
   const token = crypto.randomUUID();
   sessions.set(token, sessionRecord(id));
   res.writeHead(302, {
     Location: '/app?msg=registered',
-    'Set-Cookie': sessionCookie(req, token, 7 * 24 * 3600),
+    'Set-Cookie': sessionCookie(req, token, SESSION_MAX_AGE),
     'Cache-Control': 'no-store'
   });
   res.end();
 }
+
 
 function doLogout(req, res) {
   const token = parseCookies(req).scrl_session;
