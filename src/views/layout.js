@@ -311,7 +311,7 @@ body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 .nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .nav a.nav-exchange{color:var(--accent-button-text);background:var(--accent-button);border-color:var(--accent-button);font-weight:700;padding-left:14px;padding-right:14px}
 .nav a.nav-exchange:hover,.nav a.nav-exchange:focus-visible{color:var(--accent-button-text);background:var(--accent-button-hover);border-color:var(--accent-button-hover);box-shadow:0 2px 9px rgba(49,97,75,.14)}
-.nav a.nav-exchange:after{content:"";width:6px;height:6px;margin-left:8px;border-radius:50%;background:currentColor;opacity:.7}
+.nav a.nav-exchange:after{content:"↗";margin-left:8px;font-size:12px;font-weight:800;line-height:1}
 .header-right{margin-left:auto}
 main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-height:calc(100dvh - 145px);padding-top:clamp(28px,3vw,46px);padding-bottom:clamp(48px,5vw,76px)}
 .site-footer{flex:0 0 auto;padding-top:14px;padding-bottom:22px;border-top:1px solid var(--border);color:var(--muted);font-size:11px}
@@ -391,7 +391,7 @@ main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-heigh
   .mobile-nav-primary>a,.mobile-more>summary{display:flex;align-items:center;justify-content:center;flex:1 1 0;min-width:0;min-height:48px;padding:6px 3px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.2;text-align:center;white-space:normal;overflow-wrap:anywhere;text-decoration:none!important;cursor:pointer}
   .mobile-nav-primary>a:hover,.mobile-more>summary:hover{color:var(--text)}
   .mobile-nav-primary>a.nav-exchange{color:var(--accent-button-text);background:var(--accent-button);border:1px solid var(--accent-button);font-weight:750}
-  .mobile-nav-primary>a.nav-exchange:after{content:"";width:5px;height:5px;margin-left:4px;border-radius:50%;background:currentColor}
+  .mobile-nav-primary>a.nav-exchange:after{content:"↗";margin-left:4px;font-size:10px;font-weight:800}
   .mobile-nav-primary>a:active{background:var(--surface-soft);border-color:var(--border)}
   .mobile-more{display:block;position:relative;flex:0 0 54px;min-width:54px}
   .mobile-more>summary{width:100%;list-style:none;color:var(--accent)}
@@ -436,6 +436,7 @@ function layout(title, user, content) {
   const navLinks = !user ? [] : ({
     student: [
       { href: '/app', label: 'Главная' },
+      { href: '/exchange', label: 'Биржа ScRl', className: 'nav-exchange' },
       { href: '/market', label: 'Услуги' },
       { href: '/board', label: 'Доска помощи' },
       { href: '/orders', label: 'Заказы' },
@@ -450,7 +451,7 @@ function layout(title, user, content) {
     admin: [
       { href: '/admin', label: 'Монитор' },
       { href: '/admin/users', label: 'Пользователи' },
-      { href: '/admin/market', label: 'Биржа ScRl', className: 'nav-exchange' },
+      { href: '/admin/market', label: 'Курс ScRl' },
       { href: '/auctions', label: 'Аукционы' },
       { href: '/admin/moderation', label: 'Модерация' },
       { href: '/admin/ai', label: 'AI-помощник' },
