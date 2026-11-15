@@ -115,7 +115,7 @@ function ensureCollections() {
     'funding_sources', 'funding_reserves', 'payment_intents', 'payout_requests',
     'provider_events', 'partner_settlements', 'refund_operations',
     'withdrawal_eligibility_checks', 'guardian_links', 'consent_records',
-    'financial_audit_logs'
+    'financial_audit_logs', 'token_rate_candles'
   ];
   let changed = false;
   for (const name of collections) {
@@ -133,6 +133,13 @@ function ensureCollections() {
       teacher_weekly_limit: 500
     };
     changed = true;
+  }
+  // Every student has a separate V-RUB escrow account for exchange listings.
+  for (const user of state.users.filter(item => item.role === 'student')) {
+    if (!state.accounts.some(item => item.user_id === user.id && item.kind === 'vrub_held')) {
+      state.accounts.push({ id: crypto.randomUUID(), user_id: user.id, kind: 'vrub_held', balance: 0 });
+      changed = true;
+    }
   }
   if (!state.demand_posts.length && !state.offer_posts.length) {
     const ivan = state.users.find(u => u.email === 'ivan@scrl.demo');
