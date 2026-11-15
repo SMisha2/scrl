@@ -10,17 +10,39 @@ function handleReportPost(res, user, params) {
   const postId = params.get('post_id');
   const kind = params.get('post_kind') === 'offer' ? 'offer' : 'demand';
   const collection = kind === 'offer' ? state.offer_posts : state.demand_posts;
-  const post = collection.find(p => p.id === postId && p.status === 'active');
-  if (!post || post.user_id === user.id) return redirect(res, '/?error=bad');
-  const existing = state.reports.find(r => r.post_id === postId && r.created_by === user.id && r.status === 'open');
-  if (existing) return redirect(res, '/?msg=reported');
+  const post = collection.find(x => x.id === postId && x.status === 'active');
+  if (!post || post.user_id === user.id) return redirect(res, kind === 'offer' ? '/offers?error=bad' : '/demand?error=bad');
+
+  const existing = state.reports.find(x =>
+    x.post_id === postId && x.post_kind === kind && x.created_by === user.id && x.status === 'open'
+  );
+  if (existing) return redirect(res, kind === 'offer' ? '/offers?msg=reported' : '/demand?msg=reported');
+
+  const reasons = {
+    unsafe: 'Опасный товар или услуга',
+    privacy: 'Личные или платёжные данные',
+    harassment: 'Оскорбления или угрозы',
+    spam: 'Спам или обман',
+    academic: 'Недобросовестная учёба',
+    other: 'Другое'
+  };
+  const reasonCode = params.get('reason_code') || 'other';
+  const details = (params.get('details') || '').trim().slice(0, 300);
+  const reason = (reasons[reasonCode] || reasons.other) + (details ? ': ' + details : '');
+  const now = new Date().toISOString();
+
   state.reports.unshift({
     id: crypto.randomUUID(), post_id: postId, post_kind: kind,
-    created_by: user.id, reason: 'Жалоба пользователя на публикацию',
-    status: 'open', created_at: new Date().toISOString()
+    created_by: user.id, reason, reason_code: reasons[reasonCode] ? reasonCode : 'other',
+    status: 'open', created_at: now
   });
-  state.admin_audit_logs.push({ id: crypto.randomUUID(), actor_id: user.id, action: 'post_reported', target_id: postId, reason: 'User report', created_at: new Date().toISOString() });
-  state.users.filter(u => u.role === 'admin').forEach(a => notify(a.id, 'moderation', 'Новая жалоба', 'Поступила жалоба на публикацию «' + post.title + '».', '/admin/moderation'));
+  state.admin_audit_logs.push({
+    id: crypto.randomUUID(), actor_id: user.id, action: 'post_reported',
+    target_id: postId, reason, created_at: now
+  });
+  state.users.filter(x => x.role === 'admin').forEach(admin =>
+    notify(admin.id, 'moderation', 'Новая жалоба', 'Поступила жалоба на публикацию «' + post.title + '».', '/admin/moderation')
+  );
   save();
   return redirect(res, kind === 'offer' ? '/offers?msg=reported' : '/demand?msg=reported');
 }
