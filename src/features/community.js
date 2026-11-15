@@ -149,7 +149,7 @@ function pageBoard(res, user, url, kind) {
   sendHtml(res, layout(heading, user,
     flashBox(url) + '<div class="row-between"><h1>' + heading + '</h1><a class="btn btn-ghost btn-sm" href="/activity">Мои отклики</a></div>' +
     form + '<section class="card"><form method="GET" action="' + (isDemand ? '/demand' : '/offers') + '" class="grid grid-2"><div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div><div><label>Категория</label><select name="category"><option value="">Все категории</option>' + categories.map(c => '<option ' + (category === c ? 'selected' : '') + ' value="' + esc(c) + '">' + esc(c) + '</option>').join('') + '</select></div><button class="btn btn-ghost btn-sm">Применить фильтры</button></form></section>' +
-    (cards || '<div class="card text-center"><h2>Пока нет публикаций</h2><p class="muted">Создайте первую публикацию или измените параметры поиска.</p></div>')
+    (cards || '<div class="card text-center"><h2>Пока нет публикаций</h2><p class="muted">Публикаций пока нет.</p></div>')
   ));
 }
 
@@ -261,7 +261,7 @@ function pageCommunity(res, user, url) {
   sendHtml(res, layout('Общая доска', user,
     flashBox(url) + '<div class="page-heading"><h1>Доска помощи</h1></div>' +
     recommendationSection + compose + filters + '<div class="row-between board-count"><span class="muted small">' + posts.length + ' публикаций</span></div>' +
-    '<div class="board-feed">' + (cards || '<p class="muted" style="padding:24px 0">Пока тихо. Будь первым — выложи, что тебе нужно.</p>') + '</div>' + deadlineDisplayScript
+    '<div class="board-feed">' + (cards || '<p class="muted" style="padding:24px 0">Публикаций пока нет.</p>') + '</div>' + deadlineDisplayScript
   ));
 }
 
@@ -439,7 +439,7 @@ function pageApplications(res, user, url) {
     (incoming.map(app => card(app, true)).join('') || '<p class="muted">Пока нет входящих откликов.</p>') + '</section><section><h2>Мои отклики <span class="muted small">(' + outgoing.length + ')</span></h2>' +
     (outgoing.map(app => card(app, false)).join('') || '<p class="muted">Вы ещё не отправляли отклики.</p>') + '</section></div>' +
     '<section class="mt-2" id="deals"><div class="row-between"><div><h2>Мои сделки <span class="muted small">(' + deals.length + ')</span></h2></div><a class="small" href="/deals">Все сделки →</a></div>' +
-    (dealCards || '<div class="card"><p class="muted">Активных сделок пока нет. Откликнитесь на публикацию на общей доске.</p><a class="btn btn-primary btn-sm mt-1" href="/board">Открыть доску</a></div>') + '</section>'
+    (dealCards || '<div class="card"><p class="muted">Активных сделок пока нет.</p><a class="btn btn-primary btn-sm mt-1" href="/board">Открыть доску</a></div>') + '</section>'
   ));
 }
 
