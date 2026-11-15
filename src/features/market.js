@@ -156,43 +156,53 @@ function handleBuyListing(res, user, params) {
 
 function pageOrders(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
-  const statusLabel = s => ({
+  const statusLabel = value => ({
     awaiting_delivery: 'Ожидает выполнения',
     awaiting_confirmation: 'Ожидает подтверждения',
-    completed: 'Выполнен', disputed: 'Спор', refunded: 'Возврат'
-  }[s] || s);
-  const statusBadge = s => ({
-    awaiting_delivery: 'badge-muted', awaiting_confirmation: 'badge-accent',
-    completed: 'badge-success', disputed: 'badge-danger'
-  }[s] || 'badge-muted');
-  const cardFor = (o, kind) => {
-    const listing = state.listings.find(l => l.id === o.listing_id);
-    const other = state.users.find(u => u.id === (kind === 'buyer' ? o.seller_id : o.buyer_id));
-    let actions = '';
-    if (kind === 'buyer' && o.status === 'awaiting_confirmation')
-      actions = `<form method="POST" action="/orders/confirm"><input type="hidden" name="order_id" value="${o.id}"><button class="btn btn-primary btn-sm">Подтвердить выполнение</button></form>`;
-    if (kind === 'seller' && o.status === 'awaiting_delivery')
-      actions = `<form method="POST" action="/orders/deliver"><input type="hidden" name="order_id" value="${o.id}"><button class="btn btn-primary btn-sm">Я выполнил</button></form>`;
-    return `<div class="card">
-      <div class="row-between">
-        <div><b>${esc(listing ? listing.title : '—')}</b>
-          <div class="muted small">${kind === 'buyer' ? 'Продавец' : 'Покупатель'}: ${esc(other ? other.full_name : '')}</div></div>
-        <div style="text-align:right"><div class="accent"><b>🪙 ${o.price}</b></div>
-          <span class="badge ${statusBadge(o.status)}">${statusLabel(o.status)}</span></div>
-      </div>
-      ${actions ? `<div class="mt-2">${actions}</div>` : ''}
-    </div>`;
-  };
-  const buyer = state.orders.filter(o => o.buyer_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const seller = state.orders.filter(o => o.seller_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    disputed: 'На рассмотрении',
+    completed: 'Выполнен',
+    refunded: 'Возврат'
+  }[value] || value);
+  const statusBadge = value => ({
+    awaiting_delivery: 'badge-muted',
+    awaiting_confirmation: 'badge-accent',
+    disputed: 'badge-danger',
+    completed: 'badge-success',
+    refunded: 'badge-muted'
+  }[value] || 'badge-muted');
 
-  sendHtml(res, layout('Заказы', user, `
-    ${flashBox(url)}
-    <h1>Мои заказы</h1>
-    <h2>Я покупаю</h2>
-    ${buyer.length ? buyer.map(o => cardFor(o, 'buyer')).join('') : '<p class="muted small">Нет покупок</p>'}
-    <h2 class="mt-2">Я продаю</h2>
-    ${seller.length ? seller.map(o => cardFor(o, 'seller')).join('') : '<p class="muted small">Нет заказов</p>'}`));
+  const cardFor = (order, role) => {
+    const listing = state.listings.find(item => item.id === order.listing_id);
+    const other = state.users.find(item => item.id === (role === 'buyer' ? order.seller_id : order.buyer_id));
+    const open = ['awaiting_delivery', 'awaiting_confirmation'].includes(order.status);
+    let actions = '';
+    if (role === 'buyer' && order.status === 'awaiting_confirmation') {
+      actions += '<form method="POST" action="/orders/confirm"><input type="hidden" name="order_id" value="' + esc(order.id) + '"><button class="btn btn-primary btn-sm">Подтвердить выполнение</button></form>';
+    }
+    if (role === 'seller' && order.status === 'awaiting_delivery') {
+      actions += '<form method="POST" action="/orders/deliver"><input type="hidden" name="order_id" value="' + esc(order.id) + '"><button class="btn btn-primary btn-sm">Я выполнил</button></form>';
+    }
+    if (open) {
+      actions += '<details class="mt-1"><summary class="btn btn-ghost btn-sm" style="cursor:pointer">Открыть спор</summary>' +
+        '<form method="POST" action="/orders/dispute" class="mt-1"><input type="hidden" name="order_id" value="' + esc(order.id) + '">' +
+        '<label>Опишите проблему</label><textarea name="reason" rows="2" maxlength="500" required placeholder="Что произошло?"></textarea>' +
+        '<button class="btn btn-ghost btn-sm">Передать модератору</button></form></details>';
+    }
+    return '<article class="card"><div class="row-between"><div><b>' + esc(listing ? listing.title : 'Заказ Marketplace') + '</b>' +
+      '<div class="muted small">' + (role === 'buyer' ? 'Продавец: ' : 'Покупатель: ') + esc(other ? other.full_name : '—') + '</div></div>' +
+      '<div style="text-align:right"><div class="accent"><b>🪙 ' + Number(order.price || 0).toLocaleString('ru-RU') + '</b></div>' +
+      '<span class="badge ' + statusBadge(order.status) + '">' + statusLabel(order.status) + '</span></div></div>' +
+      (order.dispute_reason ? '<p class="small mt-1">Причина спора: ' + esc(order.dispute_reason) + '</p>' : '') +
+      (actions ? '<div class="row mt-2">' + actions + '</div>' : '') + '</article>';
+  };
+
+  const buyer = state.orders.filter(order => order.buyer_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const seller = state.orders.filter(order => order.seller_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  sendHtml(res, layout('Заказы', user, flashBox(url) +
+    '<h1>Мои заказы</h1><h2>Я покупаю</h2>' +
+    (buyer.length ? buyer.map(order => cardFor(order, 'buyer')).join('') : '<p class="muted small">Нет покупок</p>') +
+    '<h2 class="mt-2">Я продаю</h2>' +
+    (seller.length ? seller.map(order => cardFor(order, 'seller')).join('') : '<p class="muted small">Нет заказов</p>')));
 }
 
 
@@ -204,6 +214,36 @@ function handleDeliver(res, user, params) {
   order.delivered_at = new Date().toISOString();
   save();
   redirect(res, '/orders?msg=delivered');
+}
+
+
+function handleOrderDispute(res, user, params) {
+  if (user.role !== 'student') return redirect(res, '/');
+  const order = state.orders.find(item => item.id === params.get('order_id'));
+  const reason = (params.get('reason') || '').trim().slice(0, 500);
+  if (!order || ![order.buyer_id, order.seller_id].includes(user.id) ||
+      !['awaiting_delivery', 'awaiting_confirmation'].includes(order.status) || !reason) {
+    return redirect(res, '/orders?error=bad');
+  }
+  const now = new Date().toISOString();
+  order.status = 'disputed';
+  order.dispute_reason = reason;
+  order.disputed_by = user.id;
+  order.disputed_at = now;
+  const item = {
+    id: crypto.randomUUID(), kind: 'market_order', target_id: order.id,
+    status: 'open', reason, created_by: user.id, created_at: now
+  };
+  state.moderation_cases.unshift(item);
+  state.admin_audit_logs.push({
+    id: crypto.randomUUID(), actor_id: user.id, action: 'market_order_disputed',
+    target_id: order.id, reason, created_at: now
+  });
+  save();
+  state.users.filter(admin => admin.role === 'admin').forEach(admin =>
+    notify(admin.id, 'moderation', 'Спор по заказу Marketplace', reason, '/admin/moderation')
+  );
+  return redirect(res, '/orders?msg=disputed');
 }
 
 
@@ -251,4 +291,4 @@ function handleConfirm(res, user, params) {
 }
 
 
-module.exports = { pageMarket, handleCreateListing, handleDeleteListing, handleBuyListing, pageOrders, handleDeliver, handleConfirm };
+module.exports = { pageMarket, handleCreateListing, handleDeleteListing, handleBuyListing, pageOrders, handleDeliver, handleOrderDispute, handleConfirm };
