@@ -10,6 +10,8 @@ function readBody(req, limit = 64 * 1024) {
     const chunks = [];
     let size = 0;
     let exceeded = false;
+    let settled = false;
+
     req.on('data', chunk => {
       size += chunk.length;
       if (size > limit) {
@@ -20,16 +22,29 @@ function readBody(req, limit = 64 * 1024) {
       if (!exceeded) chunks.push(Buffer.from(chunk));
     });
     req.on('end', () => {
+      if (settled) return;
+      settled = true;
       if (exceeded) {
         const error = new Error('Request body too large');
         error.statusCode = 413;
         reject(error);
-      } else resolve(Buffer.concat(chunks).toString('utf8'));
+      } else {
+        resolve(Buffer.concat(chunks, size).toString('utf8'));
+      }
     });
-    req.on('error', reject);
-    req.on('aborted', () => reject(new Error('Request aborted')));
+    req.on('aborted', () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Request body was aborted'));
+    });
+    req.on('error', error => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
   });
 }
+
 
 function sendHtml(res, html, status = 200) {
   res.writeHead(status, {
