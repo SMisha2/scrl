@@ -235,6 +235,7 @@ function handleApplicationAction(res, user, params) {
     return redirect(res, '/applications?msg=declined');
   }
 
+  if (params.get('decision') !== 'accept') return redirect(res, '/applications?error=bad');
   const post = (app.post_kind === 'demand' ? state.demand_posts : state.offer_posts)
     .find(item => item.id === app.post_id);
   if (!post || post.status !== 'active') return redirect(res, '/applications?error=notfound');
@@ -502,8 +503,14 @@ function pageProfile(res, user, url) {
 }
 
 function toggleFavorite(res, user, params) {
+  if (user.role !== 'student') return redirect(res, '/');
   const postId = params.get('post_id');
   const kind = params.get('post_kind') === 'offer' ? 'offer' : 'demand';
+  const collection = kind === 'offer' ? state.offer_posts : state.demand_posts;
+  const post = collection.find(item => item.id === postId && item.status === 'active');
+  if (!post || post.user_id === user.id && !state.favorites.some(item => item.user_id === user.id && item.post_id === postId && item.post_kind === kind)) {
+    return redirect(res, kind === 'offer' ? '/offers?error=notfound' : '/demand?error=notfound');
+  }
   const index = state.favorites.findIndex(f => f.user_id === user.id && f.post_id === postId && f.post_kind === kind);
   if (index >= 0) state.favorites.splice(index, 1);
   else state.favorites.push({ id: crypto.randomUUID(), user_id: user.id, post_id: postId, post_kind: kind, created_at: new Date().toISOString() });
