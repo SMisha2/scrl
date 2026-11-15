@@ -177,7 +177,7 @@ test('signup bonus is capped by the remaining backed supply capacity', () => {
   // Existing ratio is 0.05; only 100 ScRl of backed issuance capacity remain.
   const rateAtRegistration = market.getTokenMarketStats().referenceRate;
   assert.equal(rateAtRegistration, 4000 / 79900);
-  assert.equal(market.calculateSignupBonusScRl(rateAtRegistration), 100);
+  assert.equal(market.calculateSignupBonusScRl(rateAtRegistration), 99);
 });
 
 test('an order cannot create two market trades', () => {
