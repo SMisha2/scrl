@@ -58,7 +58,7 @@ function pageBoard(res, user, url, kind) {
       (post.deadline ? '<div class="muted small mt-1">Желаемый срок: ' + esc(post.deadline) + '</div>' : '') +
       '<div class="row mt-2">' + responseForm +
       '<form method="POST" action="/favorites/toggle"><input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + kind + '"><button class="btn btn-ghost btn-sm">' + (favorite ? '★ В избранном' : '☆ В избранное') + '</button></form>' +
-      (!mine ? '<form method="POST" action="/posts/report"><input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + kind + '"><button class="btn btn-ghost btn-sm">Пожаловаться</button></form>' : '') +
+      (!mine ? '<details class="mt-1"><summary class="btn btn-ghost btn-sm" style="cursor:pointer">Пожаловаться</summary><form method="POST" action="/posts/report" class="mt-1"><input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + kind + '"><label>Причина жалобы</label><select name="reason_code" required><option value="unsafe">Опасный товар или услуга</option><option value="privacy">Личные или платёжные данные</option><option value="harassment">Оскорбления или угрозы</option><option value="spam">Спам или обман</option><option value="academic">Недобросовестная учёба</option><option value="other">Другое</option></select><label>Дополнительные детали (необязательно)</label><textarea name="details" maxlength="300" rows="2" placeholder="Опишите, что именно вызывает опасение"></textarea><button class="btn btn-ghost btn-sm" type="submit">Отправить жалобу</button></form></details>' : '') +
       '</div></article>';
   }).join('');
   const action = isDemand ? '/demand/create' : '/offers/create';
@@ -101,7 +101,7 @@ function createPost(res, user, params, kind) {
     id: crypto.randomUUID(), user_id: user.id, title, description, category,
     price_mode: mode, price, price_min: mode === 'range' ? price : null,
     price_max: mode === 'range' ? priceMax : null, deadline: deadline || null,
-    status: moderation.level === 'high' ? 'pending' : 'active',
+    status: moderation.requiresReview ? 'pending' : 'active',
     moderation_level: moderation.level, moderation_findings: moderation.findings,
     created_at: new Date().toISOString(), updated_at: new Date().toISOString()
   };
