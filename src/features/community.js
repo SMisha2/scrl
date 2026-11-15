@@ -115,7 +115,12 @@ function createPost(res, user, params, kind) {
     });
   }
   save();
-  if (post.status === 'pending') return redirect(res, (isDemand ? '/demand' : '/offers') + '?msg=pending_review');
+  if (post.status === 'pending') {
+    state.users.filter(admin => admin.role === 'admin').forEach(admin =>
+      notify(admin.id, 'moderation', 'Новая публикация на проверке', 'Требуется проверка публикации «' + post.title + '».', '/admin/moderation')
+    );
+    return redirect(res, (isDemand ? '/demand' : '/offers') + '?msg=pending_review');
+  }
   return redirect(res, (isDemand ? '/demand' : '/offers') + '?msg=created');
 }
 
