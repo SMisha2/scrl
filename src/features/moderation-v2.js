@@ -19,10 +19,18 @@ function findPost(kind, id) {
   return list.find(post => post.id === id) || null;
 }
 
+function reportMeta(report) {
+  return {
+    postId: report.post_id || (report.target_type === 'post' ? report.target_id : null),
+    postKind: report.post_kind || (report.post_type === 'demand' ? 'demand' : report.post_type === 'offer' ? 'offer' : null),
+    reporterId: report.created_by || report.reporter_id || null
+  };
+}
+
 function pageModeration(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
   const query = (url.searchParams.get('q') || '').trim().toLowerCase().slice(0, 100);
-  const cases = state.moderation_cases.filter(item => item.status === 'open').filter(item => {
+  const cases = state.moderation_cases.filter(item => item.status === 'open' && ['post', 'deal'].includes(item.kind)).filter(item => {
     const post = item.kind === 'post' ? findPost(item.post_kind, item.target_id) : null;
     const deal = item.kind === 'deal' ? state.deals.find(x => x.id === item.target_id) : null;
     return !query || [item.reason, item.recommendation, post?.title, post?.description, deal?.dispute_reason, deal?.id]
@@ -59,14 +67,17 @@ function pageModeration(res, user, url) {
   }).join('');
 
   const reports = state.reports.filter(report => report.status === 'open').filter(report => {
-    const post = findPost(report.post_kind, report.post_id);
+    const meta = reportMeta(report);
+    if (!meta.postId || !meta.postKind) return false;
+    const post = findPost(meta.postKind, meta.postId);
     return !query || [report.reason, post?.title, post?.description].filter(Boolean).join(' ').toLowerCase().includes(query);
   }).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
   const reportHtml = reports.map(report => {
-    const post = findPost(report.post_kind, report.post_id);
-    const reporter = state.users.find(x => x.id === report.created_by);
+    const meta = reportMeta(report);
+    const post = findPost(meta.postKind, meta.postId);
+    const reporter = state.users.find(x => x.id === meta.reporterId);
     const author = post && state.users.find(x => x.id === post.user_id);
-    const buttons = '<form method="POST" action="/admin/moderation/report"><input type="hidden" name="report_id" value="' + esc(report.id) + '"><input type="hidden" name="decision" value="dismiss"><button class="btn btn-ghost btn-sm">Отклонить жалобу</button></form>' +
+    const buttons = '<form method="POST" action="/admin/moderation/report"><input type="hidden" name="report_id" value="' + esc(report.id) + '"><button type="hidden" name="decision" value="dismiss"><button class="btn btn-ghost btn-sm">Отклонить жалобу</button></form>' +
       '<form method="POST" action="/admin/moderation/report"><input type="hidden" name="report_id" value="' + esc(report.id) + '"><input type="hidden" name="decision" value="remove"><button class="btn btn-danger btn-sm">Скрыть публикацию</button></form>';
     return '<article class="card"><div class="row-between"><b>' + esc(post?.title || 'Публикация не найдена') + '</b><span class="badge badge-accent">Жалоба</span></div>' +
       (post ? '<p class="mt-1">' + esc(post.description) + '</p>' : '') +
@@ -181,7 +192,8 @@ function handleReportAction(res, user, params) {
   const decision = params.get('decision');
   if (!['remove', 'dismiss'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
   const now = new Date().toISOString();
-  const post = findPost(report.post_kind, report.post_id);
+  const meta = reportMeta(report);
+  const post = findPost(meta.postKind, meta.postId);
   const messages = [];
 
   if (decision === 'remove' && post) {
@@ -191,8 +203,8 @@ function handleReportAction(res, user, params) {
     post.moderation_decision = 'removed_after_report';
     messages.push({ id: post.user_id, title: 'Публикация скрыта модератором',
       body: 'Публикация скрыта после рассмотрения жалобы. Если вы считаете это ошибкой, обратитесь к администрации.',
-      href: report.post_kind === 'offer' ? '/offers' : '/demand' });
-    for (const duplicate of state.reports.filter(x => x.post_id === report.post_id && x.post_kind === report.post_kind && x.status === 'open')) {
+      href: meta.postKind === 'offer' ? '/offers' : '/demand' });
+    for (const duplicate of state.reports.filter(x => { const value = reportMeta(x); return value.postId === meta.postId && value.postKind === meta.postKind && x.status === 'open'; })) {
       duplicate.status = 'action_taken';
       duplicate.reviewed_by = user.id;
       duplicate.reviewed_at = now;
@@ -205,14 +217,14 @@ function handleReportAction(res, user, params) {
     report.decision = decision;
   }
 
-  messages.push({ id: report.created_by, title: 'Жалоба рассмотрена',
+  messages.push({ id: meta.reporterId, title: 'Жалоба рассмотрена',
     body: decision === 'dismiss' ? 'По результатам проверки оснований для удаления публикации не найдено.' :
       'Модератор рассмотрел жалобу и принял меры.', href: '/notifications' });
   state.moderation_actions.push({
     id: crypto.randomUUID(), case_id: null, report_id: report.id,
-    admin_id: user.id, action: decision, target_id: report.post_id, created_at: now
+    admin_id: user.id, action: decision, target_id: meta.postId, created_at: now
   });
-  audit(user, 'report_' + decision, report.post_id, report.reason);
+  audit(user, 'report_' + decision, meta.postId, report.reason);
   save();
   for (const message of messages) notify(message.id, 'moderation', message.title, message.body, message.href);
   return redirect(res, '/admin/moderation?msg=reviewed');
