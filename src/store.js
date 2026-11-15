@@ -168,6 +168,261 @@ function balance(userId, kind) {
 }
 
 
+
+function fundingSourceFor(category) {
+  const id = 'legacy-' + String(category).toLowerCase();
+  let source = state.funding_sources.find(x => x.id === id);
+  if (!source) {
+    source = {
+      id, name: category + ' / unverified source',
+      category, verified: false, created_at: new Date().toISOString()
+    };
+    state.funding_sources.push(source);
+  }
+  return source.id;
+}
+
+function addTokenLedgerEntry(data) {
+  state.token_ledger_entries.push({
+    id: crypto.randomUUID(),
+    tx_id: data.tx_id,
+    lot_id: data.lot_id || null,
+    source_lot_id: data.source_lot_id || null,
+    user_id: data.user_id,
+    account_kind: data.account_kind,
+    category: data.category,
+    origin_category: data.origin_category || data.category,
+    funding_source_id: data.funding_source_id || null,
+    event_type: data.event_type,
+    amount: data.amount,
+    actor_id: data.actor_id || null,
+    reason: data.reason || null,
+    created_at: data.created_at
+  });
+}
+
+function createTokenLot(userId, accountKind, amount, category, originCategory, sourceId, txId, now, sourceLotId) {
+  if (!amount || amount <= 0) return null;
+  const source = sourceId || fundingSourceFor(category);
+  const lot = {
+    id: crypto.randomUUID(),
+    user_id: userId,
+    account_kind: accountKind,
+    category,
+    origin_category: originCategory || category,
+    funding_source_id: source,
+    source_lot_id: sourceLotId || null,
+    source_tx_id: txId,
+    policy_version: Number(state.settings.token_policy_version || 1),
+    available_amount: accountKind === 'available' ? amount : 0,
+    locked_amount: accountKind === 'held' ? amount : 0,
+    redeemed_amount: 0,
+    withdrawal_eligible: false,
+    created_at: now
+  };
+  state.token_lots.push(lot);
+  addTokenLedgerEntry({
+    tx_id: txId, lot_id: lot.id, user_id: userId, account_kind: accountKind,
+    category, origin_category: lot.origin_category, funding_source_id: source,
+    event_type: 'credit', amount, created_at: now
+  });
+  return lot;
+}
+
+function tokenCategoryForTransaction(kind) {
+  if (kind === 'signup_bonus') return 'Bonus';
+  if (kind === 'credit_teacher' || kind === 'credit_admin') return 'School';
+  if (kind === 'partner_topup_verified' || kind === 'topup_confirmed') return 'Purchased';
+  return 'Earned';
+}
+
+function moveTokenLots(userId, fromKind, toKind, amount, txId, now, actorId) {
+  const sourceField = fromKind === 'held' ? 'locked_amount' : 'available_amount';
+  const targetField = toKind === 'held' ? 'locked_amount' : 'available_amount';
+  let remaining = amount;
+  const lots = state.token_lots
+    .filter(l => l.user_id === userId && (l[sourceField] || 0) > 0)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const moved = Math.min(remaining, lot[sourceField]);
+    lot[sourceField] -= moved;
+    lot[targetField] += moved;
+    lot.account_kind = toKind;
+    addTokenLedgerEntry({
+      tx_id: txId, lot_id: lot.id, user_id: userId, account_kind: toKind,
+      category: lot.category, origin_category: lot.origin_category,
+      funding_source_id: lot.funding_source_id,
+      event_type: fromKind === 'available' ? 'lock' : 'unlock',
+      amount: moved, actor_id: actorId, created_at: now
+    });
+    remaining -= moved;
+  }
+  if (remaining > 0) {
+    const legacy = createTokenLot(userId, fromKind, remaining, 'Legacy', 'Legacy', fundingSourceFor('Legacy'), txId, now);
+    if (legacy) {
+      legacy[sourceField] = 0;
+      legacy[targetField] = remaining;
+      legacy.account_kind = toKind;
+      addTokenLedgerEntry({
+        tx_id: txId, lot_id: legacy.id, user_id: userId, account_kind: toKind,
+        category: 'Legacy', origin_category: 'Legacy',
+        funding_source_id: legacy.funding_source_id,
+        event_type: fromKind === 'available' ? 'lock' : 'unlock',
+        amount: remaining, actor_id: actorId, created_at: now
+      });
+    }
+  }
+}
+
+function consumeTokenLots(userId, accountKind, amount, txId, now, actorId, reason) {
+  const field = accountKind === 'held' ? 'locked_amount' : 'available_amount';
+  let remaining = amount;
+  const fragments = [];
+  const lots = state.token_lots
+    .filter(l => l.user_id === userId && (l[field] || 0) > 0)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const used = Math.min(remaining, lot[field]);
+    lot[field] -= used;
+    fragments.push({
+      category: lot.category, origin_category: lot.origin_category,
+      funding_source_id: lot.funding_source_id, source_lot_id: lot.id, amount: used
+    });
+    addTokenLedgerEntry({
+      tx_id: txId, lot_id: lot.id, user_id: userId, account_kind: accountKind,
+      category: lot.category, origin_category: lot.origin_category,
+      funding_source_id: lot.funding_source_id,
+      event_type: 'debit', amount: used, actor_id: actorId,
+      reason, created_at: now
+    });
+    remaining -= used;
+  }
+  if (remaining > 0) {
+    const legacy = createTokenLot(userId, accountKind, remaining, 'Legacy', 'Legacy', fundingSourceFor('Legacy'), txId, now);
+    if (legacy) {
+      legacy[field] = 0;
+      fragments.push({
+        category: 'Legacy', origin_category: 'Legacy',
+        funding_source_id: legacy.funding_source_id, source_lot_id: legacy.id, amount: remaining
+      });
+      addTokenLedgerEntry({
+        tx_id: txId, lot_id: legacy.id, user_id: userId, account_kind: accountKind,
+        category: 'Legacy', origin_category: 'Legacy',
+        funding_source_id: legacy.funding_source_id,
+        event_type: 'debit', amount: remaining, actor_id: actorId,
+        reason, created_at: now
+      });
+    }
+  }
+  return fragments;
+}
+
+function applyTokenLedger(txId, kind, entries, now, actorId) {
+  if (state.token_ledger_entries.some(e => e.tx_id === txId)) return;
+  const resolved = entries.map(entry => ({
+    entry,
+    account: state.accounts.find(a => a.id === entry.accountId),
+    remaining: entry.amount
+  })).filter(x => x.account && x.account.user_id && ['available', 'held'].includes(x.account.kind) && x.remaining !== 0);
+  const outgoing = resolved.filter(x => x.remaining < 0);
+  const incoming = resolved.filter(x => x.remaining > 0);
+
+  // Same-user available <-> held moves are locks/unlocks, not spend or issuance.
+  for (const out of outgoing) {
+    if (!out.remaining) continue;
+    for (const inc of incoming) {
+      if (!inc.remaining || out.account.user_id !== inc.account.user_id) continue;
+      if (out.account.kind === inc.account.kind) continue;
+      const amount = Math.min(-out.remaining, inc.remaining);
+      moveTokenLots(out.account.user_id, out.account.kind, inc.account.kind, amount, txId, now, actorId);
+      out.remaining += amount;
+      inc.remaining -= amount;
+      if (!out.remaining) break;
+    }
+  }
+
+  // Cross-user transfers preserve provenance while the current holder category becomes Earned.
+  for (const out of outgoing) {
+    if (!out.remaining) continue;
+    for (const inc of incoming) {
+      if (!inc.remaining || out.account.user_id === inc.account.user_id) continue;
+      const amount = Math.min(-out.remaining, inc.remaining);
+      const fragments = consumeTokenLots(out.account.user_id, out.account.kind, amount, txId, now, actorId, kind);
+      let remaining = amount;
+      for (const fragment of fragments) {
+        if (remaining <= 0) break;
+        const transferred = Math.min(remaining, fragment.amount);
+        createTokenLot(
+          inc.account.user_id, inc.account.kind, transferred, 'Earned',
+          fragment.origin_category || fragment.category,
+          fragment.funding_source_id, txId, now, fragment.source_lot_id
+        );
+        remaining -= transferred;
+      }
+      out.remaining += amount;
+      inc.remaining -= amount;
+      if (!out.remaining) break;
+    }
+  }
+
+  // Outgoing tokens not transferred to another user are consumed or burned.
+  for (const out of outgoing) {
+    if (out.remaining < 0) {
+      consumeTokenLots(out.account.user_id, out.account.kind, -out.remaining, txId, now, actorId, kind);
+      out.remaining = 0;
+    }
+  }
+
+  // Remaining positive entries are system-funded credits; category is server-derived.
+  const category = tokenCategoryForTransaction(kind);
+  for (const inc of incoming) {
+    if (inc.remaining > 0) {
+      createTokenLot(
+        inc.account.user_id, inc.account.kind, inc.remaining, category, category,
+        fundingSourceFor(category), txId, now
+      );
+      inc.remaining = 0;
+    }
+  }
+}
+
+function rebuildTokenLedgerFromHistory() {
+  if (state.token_ledger_initialized) return;
+  state.token_lots = [];
+  state.token_ledger_entries = [];
+  const transactions = state.transactions.slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const tx of transactions) {
+    const txEntries = state.entries.filter(e => e.tx_id === tx.id).map(e => ({
+      accountId: e.account_id, amount: e.amount, note: e.note
+    }));
+    if (txEntries.length) applyTokenLedger(tx.id, tx.kind, txEntries, tx.created_at, tx.initiator_id);
+  }
+  for (const acc of state.accounts.filter(a => a.user_id && ['available', 'held'].includes(a.kind))) {
+    const field = acc.kind === 'held' ? 'locked_amount' : 'available_amount';
+    const tracked = state.token_lots
+      .filter(l => l.user_id === acc.user_id)
+      .reduce((sum, lot) => sum + (lot[field] || 0), 0);
+    const difference = acc.balance - tracked;
+    if (difference > 0) {
+      createTokenLot(acc.user_id, acc.kind, difference, 'Legacy', 'Legacy', fundingSourceFor('Legacy'), 'legacy-migration', new Date().toISOString());
+    }
+  }
+  if (!state.token_policy_versions.length) {
+    ['Purchased', 'Earned', 'Bonus', 'School'].forEach(category => {
+      state.token_policy_versions.push({
+        id: crypto.randomUUID(), category, version: 1,
+        withdrawal_enabled: false,
+        policy: 'Disabled until legal approval and verified funding source.',
+        created_at: new Date().toISOString()
+      });
+    });
+  }
+  state.token_ledger_initialized = true;
+  save();
+}
+
 function recordTx(kind, initiator, payload, entries) {
   const txId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -185,9 +440,11 @@ function recordTx(kind, initiator, payload, entries) {
       amount: e.amount, note: e.note || null, created_at: now
     });
   }
+  applyTokenLedger(txId, kind, entries, now, initiator);
   save();
   return txId;
 }
 
+rebuildTokenLedgerFromHistory();
 
-module.exports = { state, seedData, save, account, systemAccount, balance, recordTx };
+module.exports = { state, seedData, save, account, systemAccount, balance, recordTx, rebuildTokenLedgerFromHistory };
