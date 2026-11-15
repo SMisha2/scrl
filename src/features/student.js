@@ -43,7 +43,7 @@ function pageApp(res, user, url) {
   sendHtml(res, layout('Главная', user, `
     ${flashBox(url)}
     <div class="row-between" style="margin-bottom:16px;align-items:end">
-      <div><h1 style="margin-bottom:2px">Главная</h1><p class="muted">Всё важное — в одном месте</p></div>
+      <div><h1 style="margin-bottom:2px">Главная</h1><p class="muted">Попроси о помощи или поделись тем, что умеешь.</p></div>
       <span class="badge badge-primary-soft">Личный кабинет</span>
     </div>
     <section class="card balance" style="padding:24px">
@@ -63,10 +63,10 @@ function pageApp(res, user, url) {
     </section>
     ${!tradeable ? `<div class="alert alert-info">Покупки и аукционы доступны с 14 лет. Вы можете просматривать доску и получать токены.</div>` : ''}
     <div class="grid grid-4 mt-2">
-      <a href="/board" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">01 · Сообщество</span><h2 class="mt-1">Общая доска</h2><p class="muted small">Ищу помощь и предлагаю свои навыки</p></a>
-      <a href="/activity" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">02 · Работа</span><h2 class="mt-1">Активность</h2><p class="muted small">Отклики, сделки и сообщения</p></a>
-      <a href="/exchange" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">03 · Обмен</span><h2 class="mt-1">Биржа</h2><p class="muted small">ScRl и виртуальные рубли</p></a>
-      <a href="/auctions" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">04 · События</span><h2 class="mt-1">Аукционы</h2><p class="muted small">Внутренние ставки ScRl</p></a>
+      <a href="/board" class="hub-link"><span class="hub-kicker">Сообщество</span><h2>Доска помощи</h2><p class="muted small">Ищу помощь и предлагаю свои навыки</p></a>
+      <a href="/activity" class="hub-link"><span class="hub-kicker">Договорённости</span><h2>Моя активность</h2><p class="muted small">Отклики, сделки и сообщения</p></a>
+      <a href="/exchange" class="hub-link"><span class="hub-kicker">Кошелёк</span><h2>Биржа ScRl</h2><p class="muted small">ScRl и виртуальные рубли</p></a>
+      <a href="/auctions" class="hub-link"><span class="hub-kicker">События</span><h2>Школьные аукционы</h2><p class="muted small">Внутренние ставки ScRl</p></a>
     </div>
     <div class="grid grid-2 mt-2">
       <section class="card">
