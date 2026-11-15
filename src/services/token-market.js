@@ -81,7 +81,7 @@ function recordTokenRateCandle(now = new Date()) {
 
   return {
     ...stats,
-    candles: state.token_rate_candles.slice(-24)
+    candles: state.token_rate_candles.slice(-MAX_CANDLES)
   };
 }
 
