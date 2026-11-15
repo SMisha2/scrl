@@ -112,7 +112,7 @@ tbody tr:last-child td{border-bottom:0}
 .compose-body>.card{margin-bottom:10px;border:0;border-top:1px solid var(--border);border-radius:0;box-shadow:none}
 .help-match{padding:17px 18px}
 .help-match>p{margin-top:5px}
-.amount-positive{color:#4C8460!important}
+.home-list-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;list-style:none}.home-list-row:last-child{border-bottom:0}.home-list-row a{color:var(--text);font-weight:620}.home-list-row a:hover{color:var(--accent)}.amount-positive{color:#4C8460!important}
 .amount-negative{color:var(--danger)!important}
 .page-heading{margin-bottom:25px}
 .mobile-nav{display:none}
