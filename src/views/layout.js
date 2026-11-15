@@ -226,7 +226,12 @@ th { color: var(--muted); background: var(--table-head); }
 .nav::-webkit-scrollbar{display:none}
 .nav a{font-size:13px;padding:7px 10px;white-space:nowrap}
 .header-right{gap:9px;flex-shrink:0}
-.header-balance{display:inline-flex;align-items:center;white-space:nowrap;text-decoration:none!important;padding:6px 11px;font-size:12px}
+.header-balance{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;text-decoration:none!important;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text)}
+.header-balance:hover{background:var(--surface-soft);text-decoration:none!important}
+.header-balance-item{display:flex;align-items:baseline;gap:4px;line-height:1.1}
+.header-balance-item small{font-size:9px;font-weight:600;color:var(--muted)}
+.header-balance-item b{font-size:12px;font-variant-numeric:tabular-nums}
+.header-balance-divider{color:var(--muted);opacity:.7}
 .notification-link{position:relative;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--border);border-radius:10px;color:var(--text);background:var(--surface);text-decoration:none!important}
 .notification-link:hover{background:var(--surface-soft)}
 .notification-link svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -239,9 +244,12 @@ th { color: var(--muted); background: var(--table-head); }
 @media(max-width:760px){
  .header-inner{gap:8px;min-height:58px;flex-wrap:nowrap}
  .header-right{gap:6px}
- .header-right .header-balance{display:none}
+ .header-right .header-balance{display:inline-flex;gap:5px;padding:5px 7px}
  .notification-link{width:34px;height:34px}
  .theme-toggle{font-size:11px;padding:6px 8px}
+ .header-balance-item{gap:3px}
+ .header-balance-item b{font-size:10px}
+ .header-balance-item small{font-size:8px}
  .logo{font-size:18px}
 }
 `;
@@ -279,7 +287,11 @@ function layout(title, user, content) {
   const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
   const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
   const badge = user && user.role === 'student'
-    ? `<a class="badge badge-accent header-balance" href="/wallet" title="Открыть кошелёк">🪙 ${balance(user.id, 'available')} ScRl</a>` : '';
+    ? `<a class="header-balance" href="/wallet" title="Открыть кошелёк — текущие доступные балансы">
+        <span class="header-balance-item"><small>ScRl</small><b>${balance(user.id, 'available').toLocaleString('ru-RU')}</b></span>
+        <span class="header-balance-divider">·</span>
+        <span class="header-balance-item"><small>V-RUB</small><b>${balance(user.id, 'vrub').toLocaleString('ru-RU')}</b></span>
+      </a>` : '';
   const unread = user ? unreadCount(user.id) : 0;
   const notificationLink = user ? `<a class="notification-link" href="/notifications" aria-label="Уведомления${unread ? ', непрочитанных: ' + unread : ''}" title="Уведомления">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
