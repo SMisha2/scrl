@@ -31,3 +31,21 @@ test('does not flag an ordinary learning offer', () => {
   assert.equal(result.level, 'low');
   assert.deepEqual(result.findings, []);
 });
+
+test('flags alcohol delivery and beverage offers before publication', () => {
+  const result = analyseText('Доставка пиццы (и пива)');
+  assert.equal(result.level, 'high');
+  assert.equal(result.requiresReview, true);
+  assert.ok(result.findings.some(item => item.code === 'restricted_goods'));
+
+  for (const text of ['Продам сидр', 'Доставка водки', 'Шампанское к празднику']) {
+    const flagged = analyseText(text);
+    assert.equal(flagged.level, 'high', text);
+    assert.ok(flagged.findings.some(item => item.code === 'restricted_goods'), text);
+  }
+});
+
+test('does not flag ordinary words that only resemble alcohol terms', () => {
+  assert.equal(analyseText('Я виноват, что не пришёл').level, 'low');
+  assert.equal(analyseText('Люблю ромашки в саду').level, 'low');
+});
