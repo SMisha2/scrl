@@ -119,22 +119,30 @@ function pageAuctions(res, user, url) {
 
 function handleCreateAuction(res, user, params) {
   if (user.role !== 'teacher' && user.role !== 'admin') return redirect(res, '/auctions?error=bad');
-  const title = (params.get('title') || '').trim();
-  const prize = (params.get('prize') || '').trim();
-  const start = parseInt(params.get('start_price') || '0', 10);
-  const step = parseInt(params.get('min_step') || '10', 10);
-  const minutes = parseInt(params.get('duration_min') || '5', 10);
-  if (!title || !prize || !start || start < 1) return redirect(res, '/auctions?error=fields');
-  if (/(RUB|руб|₽|денежн|наличн)/i.test(prize)) return redirect(res, '/auctions?error=bad');
+  const title = (params.get('title') || '').trim().slice(0, 100);
+  const prize = (params.get('prize') || '').trim().slice(0, 100);
+  const start = Number(params.get('start_price') || 0);
+  const step = Number(params.get('min_step') || 10);
+  const minutes = Number(params.get('duration_min') || 5);
+  const hasMoneyPrize = /(руб|рубл|деньг|денеж|налич|перевод|оплат|usd|eur|cash|dollar|банковск|[₽€$])/iu.test(prize);
+  if (!title || !prize || hasMoneyPrize ||
+      !Number.isSafeInteger(start) || start < 1 || start > 1000000 ||
+      !Number.isSafeInteger(step) || step < 1 || step > 1000000 ||
+      !Number.isSafeInteger(minutes) || minutes < 1 || minutes > 10080) {
+    return redirect(res, '/auctions?error=fields');
+  }
+  const now = new Date().toISOString();
   state.auctions.push({
-    id: crypto.randomUUID(), title, prize, start_price: start, min_step: step || 10,
+    id: crypto.randomUUID(), title, prize, start_price: start, min_step: step,
     current_bid: 0, current_winner_id: null,
     ends_at: new Date(Date.now() + minutes * 60 * 1000).toISOString(),
-    status: 'active', created_by: user.id, created_at: new Date().toISOString()
+    status: 'active', created_by: user.id, created_at: now
   });
   save();
-  redirect(res, '/auctions?msg=auction_created');
+  return redirect(res, '/auctions?msg=auction_created');
 }
+
+
 
 
 function handleBid(res, user, params) {
@@ -184,21 +192,53 @@ function handleBid(res, user, params) {
 function handleFinishAuction(res, user, params) {
   if (user.role !== 'admin' && user.role !== 'teacher') return redirect(res, '/auctions?error=bad');
   const auctionId = params.get('auction_id');
-  const a = state.auctions.find(x => x.id === auctionId && x.status === 'active');
-  if (!a) return redirect(res, '/auctions?error=notfound');
-  if (a.current_winner_id && a.current_bid > 0) {
+  const auction = state.auctions.find(item => item.id === auctionId && ['active', 'settlement_error'].includes(item.status));
+  if (!auction) return redirect(res, '/auctions?error=notfound');
+  if (user.role === 'teacher' && auction.created_by !== user.id) return redirect(res, '/auctions?error=bad');
+
+  if (auction.current_winner_id && Number(auction.current_bid) > 0) {
+    const previous = state.transactions.find(tx => tx.kind === 'auction_burn' && tx.payload && tx.payload.auctionId === auction.id);
+    const winningBid = state.bids.find(bid => bid.auction_id === auction.id &&
+      bid.bidder_id === auction.current_winner_id && bid.amount === auction.current_bid && bid.status === 'active');
+    const held = state.accounts.find(item => item.user_id === auction.current_winner_id && item.kind === 'held');
+    const burn = systemAccount('burn');
+
+    if (!previous && (!winningBid || !held || held.balance < auction.current_bid || !burn)) {
+      auction.status = 'settlement_error';
+      auction.settlement_error = 'Не удалось подтвердить победную ставку и её резерв.';
+      auction.settlement_error_at = new Date().toISOString();
+      save();
+      return redirect(res, '/auctions?error=settlement');
+    }
     try {
-      recordTx('auction_burn', a.current_winner_id, { auctionId, amount: a.current_bid }, [
-        { accountId: account(a.current_winner_id, 'held').id, amount: -a.current_bid, note: 'Победная ставка' },
-        { accountId: systemAccount('burn').id, amount: a.current_bid, note: 'Аукцион' }
-      ]);
-      const wonBid = state.bids.find(b => b.auction_id === auctionId && b.bidder_id === a.current_winner_id && b.status === 'active');
-      if (wonBid) wonBid.status = 'won';
-    } catch (e) { console.error('finish:', e.message); }
+      if (!previous) {
+        recordTx('auction_burn', auction.current_winner_id, { auctionId: auction.id, amount: auction.current_bid }, [
+          { accountId: held.id, amount: -auction.current_bid, note: 'Победная ставка' },
+          { accountId: burn.id, amount: auction.current_bid, note: 'Аукцион ScRl' }
+        ]);
+      }
+      if (winningBid) winningBid.status = 'won';
+    } catch (error) {
+      auction.status = 'settlement_error';
+      auction.settlement_error = String(error.message || 'Ошибка расчёта').slice(0, 160);
+      auction.settlement_error_at = new Date().toISOString();
+      save();
+      console.error('auction finish:', error.message);
+      return redirect(res, '/auctions?error=settlement');
+    }
+  } else if (auction.current_winner_id || Number(auction.current_bid) > 0) {
+    auction.status = 'settlement_error';
+    auction.settlement_error = 'Некорректные данные победителя или ставки.';
+    auction.settlement_error_at = new Date().toISOString();
+    save();
+    return redirect(res, '/auctions?error=settlement');
   }
-  a.status = 'finished';
+
+  auction.status = 'finished';
+  auction.finished_at = new Date().toISOString();
+  delete auction.settlement_error;
   save();
-  redirect(res, '/auctions?msg=auction_finished');
+  return redirect(res, '/auctions?msg=auction_finished');
 }
 
 
