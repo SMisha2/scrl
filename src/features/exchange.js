@@ -19,39 +19,50 @@ function exchangeEscrow(orderId, sellerId) {
 function pageExchange(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const tradeable = canTrade(user);
+  const rateValue = Number(state.settings && state.settings.token_exchange_rate);
+  const rate = Number.isFinite(rateValue) && rateValue > 0 ? rateValue : 1;
+  const reserve = systemAccount('reserve');
+  const reserveBalance = reserve ? reserve.balance : 0;
   const offers = state.exchange_orders.filter(order => {
     if (order.status !== 'active') return false;
     const seller = state.users.find(person => person.id === order.seller_id);
     return Boolean(seller && !seller.is_blocked && canTrade(seller));
   }).sort((a, b) => a.price_per_unit - b.price_per_unit);
-  const myOrders = state.exchange_orders.filter(e => e.seller_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 20);
-  const rows = offers.map(o => {
-    const seller = state.users.find(u => u.id === o.seller_id);
-    return `<tr><td>${esc(seller ? seller.full_name : '')}</td><td>${o.amount} ScRl</td>
-      <td>${o.price_per_unit.toFixed(2)} vrub</td>
-      <td style="text-align:right">${tradeable && o.seller_id !== user.id ? `<form method="POST" action="/exchange/buy" style="display:inline"><input type="hidden" name="order_id" value="${o.id}"><button class="btn btn-accent btn-sm">Купить</button></form>` : ''}</td></tr>`;
+  const myOrders = state.exchange_orders.filter(order => order.seller_id === user.id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 20);
+  const rows = offers.map(order => {
+    const seller = state.users.find(person => person.id === order.seller_id);
+    return '<tr><td>' + esc(seller ? seller.full_name : 'Участник') + '</td><td>' + order.amount + ' ScRl</td>' +
+      '<td>' + order.price_per_unit.toFixed(2) + ' V-RUB</td>' +
+      '<td style="text-align:right">' + (tradeable && order.seller_id !== user.id
+        ? '<form method="POST" action="/exchange/buy" style="display:inline"><input type="hidden" name="order_id" value="' + esc(order.id) + '"><button class="btn btn-accent btn-sm">Обменять</button></form>' : '') + '</td></tr>';
   }).join('');
-  const myRows = myOrders.map(o => `<li class="row-between" style="padding:6px 0;border-bottom:1px solid #E7E5E4;font-size:14px">
-    <span>${o.amount} ScRl @ ${o.price_per_unit.toFixed(2)}</span>
-    <span class="badge badge-muted">${o.status}</span>
-    ${o.status === 'active' ? `<form method="POST" action="/exchange/cancel"><input type="hidden" name="order_id" value="${o.id}"><button class="btn btn-ghost btn-sm">Отменить</button></form>` : ''}</li>`).join('');
-  sendHtml(res, layout('Биржа', user, `
-    ${flashBox(url)}
-    <h1>P2P-биржа (симуляция)</h1>
-    <div class="card"><div class="small">Вирт. рубли: <b>${balance(user.id, 'vrub')}</b> · Доступно ScRl: <b>${balance(user.id, 'available')}</b></div></div>
-    ${tradeable ? `<div class="card"><h2>Выставить ScRl на продажу</h2>
-      <form method="POST" action="/exchange/sell">
-        <div class="grid grid-2">
-          <div><label>Сколько ScRl</label><input name="amount" type="number" min="1" required></div>
-          <div><label>Цена за 1 ScRl (vrub)</label><input name="price" type="number" step="0.01" min="0.01" required value="1.00"></div>
-        </div>
-        <button class="btn btn-primary">Выставить</button>
-      </form></div>` : '<div class="alert alert-info">Торговля доступна с 14 лет.</div>'}
-    <div class="card"><h2>Предложения продавцов</h2>
-      ${rows ? `<table><thead><tr><th>Продавец</th><th>Кол-во</th><th>Цена</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted small">Нет предложений</p>'}
-    </div>
-    <div class="card"><h2>Мои заявки</h2>${myRows ? `<ul style="list-style:none">${myRows}</ul>` : '<p class="muted small">Нет заявок</p>'}</div>`));
+  const myRows = myOrders.map(order => '<li class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">' +
+    '<span>' + order.amount + ' ScRl · ' + order.price_per_unit.toFixed(2) + ' V-RUB / шт.</span>' +
+    '<span class="badge badge-muted">' + esc(order.status) + '</span>' +
+    (order.status === 'active' ? '<form method="POST" action="/exchange/cancel"><input type="hidden" name="order_id" value="' + esc(order.id) + '"><button class="btn btn-ghost btn-sm">Отменить</button></form>' : '') + '</li>').join('');
+  sendHtml(res, layout('Биржа ScRl / RUB', user, flashBox(url) +
+    '<div class="row-between"><div><h1>Биржа ScRl / RUB</h1><p class="muted">Внутренний обмен ScRl на виртуальные рубли.</p></div><span class="badge badge-accent">Симуляция</span></div>' +
+    '<div class="grid grid-2">' +
+      '<section class="card"><div class="muted small">Справочный курс токена</div><div style="font-size:28px;font-weight:750;margin:5px 0">1 ScRl = ' + rate.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' RUB*</div><p class="muted small">Внутренний ориентир, используемый для расчётных сценариев.</p></section>' +
+      '<section class="card"><div class="muted small">Reserve · запас токенов</div><div style="font-size:28px;font-weight:750;margin:5px 0">' + reserveBalance.toLocaleString('ru-RU') + ' ScRl</div><p class="muted small">Текущий остаток системного резерва. Он показывается рядом с курсом, но не является обещанием выкупа.</p></section>' +
+    '</div>' +
+    '<div class="card"><div class="grid grid-2"><div><div class="muted small">Ваши виртуальные рубли</div><h2>' + balance(user.id, 'vrub').toLocaleString('ru-RU') + ' V-RUB</h2></div><div><div class="muted small">Доступно ScRl</div><h2>' + balance(user.id, 'available').toLocaleString('ru-RU') + ' ScRl</h2></div></div></div>' +
+    (tradeable ? '<section class="card"><h2>Создать предложение обмена</h2><p class="muted small">Выставьте токены и задайте цену в виртуальных рублях.</p>' +
+      '<form method="POST" action="/exchange/sell"><div class="grid grid-2">' +
+      '<div><label>Количество ScRl</label><input name="amount" type="number" min="1" required></div>' +
+      '<div><label>Цена за 1 ScRl, V-RUB</label><input name="price" type="number" step="0.01" min="0.01" required value="' + rate.toFixed(2) + '"></div>' +
+      '</div><button class="btn btn-primary" type="submit">Разместить предложение</button></form></section>' :
+      '<div class="alert alert-info">Операции обмена внутри симуляции доступны с 14 лет.</div>') +
+    '<section class="card"><div class="row-between"><h2>Предложения обмена</h2><span class="muted small">' + offers.length + '</span></div>' +
+      (rows ? '<table><thead><tr><th>Участник</th><th>Количество</th><th>Цена</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="muted small">Пока нет активных предложений.</p>') +
+    '</section>' +
+    '<section class="card"><h2>Мои предложения</h2>' + (myRows ? '<ul style="list-style:none">' + myRows + '</ul>' : '<p class="muted small">Вы пока ничего не выставляли.</p>') + '</section>' +
+    '<div class="alert alert-info"><b>Важно:</b> V-RUB — внутренняя учебная единица. Реальные рубли не переводятся, токены не выкупаются за деньги. ' +
+    '<a href="/wallet/rub">Статус рублёвых платежей</a>. *Справочный курс не является банковским или рыночным курсом.</div>'
+  ));
 }
+
 
 
 function handleExchangeSell(res, user, params) {
