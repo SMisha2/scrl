@@ -144,15 +144,17 @@ function ensureCollections() {
   if (state.settings.vrub_initial_grant_migrated !== true) {
     for (const user of state.users.filter(item => item.role === 'student')) {
       const vrub = account(user.id, 'vrub');
-      const hasHistory = state.entries.some(entry => entry.account_id === vrub.id);
+      const vrubHeld = account(user.id, 'vrub_held');
+      const totalVrubBalance = (Number(vrub.balance) || 0) + (Number(vrubHeld.balance) || 0);
+      const hasHistory = state.entries.some(entry => entry.account_id === vrub.id || entry.account_id === vrubHeld.id);
       const hasOpeningRecord = state.vrub_ledger_entries.some(entry =>
         entry.user_id === user.id && ['initial_grant', 'opening_balance'].includes(entry.event_type)
       );
       if (!hasOpeningRecord) {
-        if (vrub.balance > 0) {
+        if (totalVrubBalance > 0) {
           state.vrub_ledger_entries.push({
             id: crypto.randomUUID(), user_id: user.id, event_type: 'opening_balance',
-            amount: vrub.balance, reason: 'Existing V-RUB balance preserved during migration',
+            amount: totalVrubBalance, reason: 'Existing V-RUB balance preserved during migration',
             created_at: new Date().toISOString()
           });
         } else if (!hasHistory) {
@@ -200,7 +202,9 @@ function grantStartingVrub(userId, reason = 'registration') {
     return false;
   }
   const vrub = account(userId, 'vrub');
-  if (vrub.balance > 0 || state.entries.some(entry => entry.account_id === vrub.id)) return false;
+  const vrubHeld = account(userId, 'vrub_held');
+  const hasHistory = state.entries.some(entry => entry.account_id === vrub.id || entry.account_id === vrubHeld.id);
+  if ((Number(vrub.balance) || 0) + (Number(vrubHeld.balance) || 0) > 0 || hasHistory) return false;
   const amount = 1000;
   vrub.balance += amount;
   state.vrub_ledger_entries.push({
