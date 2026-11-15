@@ -91,6 +91,21 @@ tbody tr:last-child td{border-bottom:0}
 .progress-bar{height:100%;background:var(--accent)}
 .theme-toggle{white-space:nowrap}
 .home-greeting{margin-bottom:28px}
+.link-button{display:inline;padding:0;border:0;background:transparent;color:var(--accent);font-size:12px;font-weight:550;cursor:pointer;text-decoration:none}
+.link-button:hover{text-decoration:underline;text-underline-offset:3px}
+.post-status{margin-left:2px;color:var(--warm);font-size:11px}
+.respond-panel,.report-panel{position:relative}
+.respond-panel>summary,.report-panel>summary{cursor:pointer;color:var(--accent);font-size:12px;font-weight:550;list-style:none}
+.respond-panel>summary::-webkit-details-marker,.report-panel>summary::-webkit-details-marker{display:none}
+.respond-form{min-width:min(350px,80vw);max-width:440px;padding:10px 0}
+.respond-form input,.respond-form textarea,.respond-form select{margin-bottom:9px}
+.respond-form label{margin-top:6px}
+.suggestion-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:12px 0;border-top:1px solid var(--border)}
+.suggestion-row h3{margin:3px 0;font-size:14px}
+.suggestion-row .respond-form{min-width:280px}
+.board-count{padding-top:12px}
+@media(max-width:760px){.suggestion-row{align-items:flex-start;flex-direction:column;gap:8px}.suggestion-row .respond-form{min-width:0;width:100%}.respond-form{min-width:0;width:100%}.post-footer{align-items:flex-start!important;flex-direction:column}.post-actions{width:100%}}
+
 .home-greeting p{margin-top:6px;color:var(--muted);font-size:14px}
 .home-balances{display:flex;align-items:flex-end;gap:34px;padding:0 0 21px;border-bottom:1px solid var(--border);margin-bottom:22px}
 .home-balance{display:flex;flex-direction:column;gap:1px}
