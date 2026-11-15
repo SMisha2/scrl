@@ -239,6 +239,39 @@ tbody tr:last-child td{border-bottom:0}
  .economy-storage{flex-direction:column;gap:11px}
 }
 
+
+.admin-users-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}
+.admin-users-header p{margin-top:5px;color:var(--muted);font-size:13px}
+.admin-user-filters{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:0 0 12px;border-bottom:1px solid var(--border)}
+.admin-user-filters a{font-size:12px;color:var(--muted)}
+.admin-user-filters a:hover{color:var(--text)}
+.admin-user-search{display:flex;align-items:center;gap:8px;max-width:620px;margin:16px 0 10px}
+.admin-user-search input{margin:0;flex:1}
+.admin-user-row{padding:14px 0}
+.admin-user-heading{align-items:flex-start;gap:20px}
+.admin-user-balance{text-align:right;white-space:nowrap;font-size:13px}
+.admin-user-meta{display:flex;align-items:center;gap:12px;margin-top:7px}
+.admin-user-actions{margin-top:10px}
+.admin-user-actions summary,.admin-delete summary,.admin-user-history summary{cursor:pointer;color:var(--accent);font-size:13px}
+.admin-user-actions-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:14px;padding:12px 0 4px}
+.admin-user-form{min-width:0;padding:8px 0;border-bottom:1px solid var(--border)}
+.admin-user-form form{margin:0}
+.admin-user-form input,.admin-user-form select{margin-bottom:8px}
+.admin-delete{grid-column:1/-1;padding:8px 0;border-top:1px solid var(--border)}
+.admin-delete p{max-width:700px;margin:8px 0 12px}
+.admin-delete form{max-width:440px}
+.admin-user-history{margin-top:28px;padding-top:14px;border-top:1px solid var(--border)}
+.admin-user-history summary{color:var(--muted)}
+.admin-user-history table{width:100%;margin-top:12px}
+@media(max-width:640px){
+  .admin-users-header{align-items:flex-start}
+  .admin-user-search{align-items:stretch;flex-wrap:wrap}
+  .admin-user-search input{flex-basis:100%}
+  .admin-user-heading{flex-direction:column;gap:8px}
+  .admin-user-balance{text-align:left}
+  .admin-user-filters{gap:12px}
+}
+
 `;
 
 
