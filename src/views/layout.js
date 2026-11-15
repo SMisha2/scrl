@@ -427,7 +427,9 @@ function layout(title, user, content) {
   const navLinks = !user ? [] : ({
     student: [
       { href: '/app', label: 'Главная' },
+      { href: '/market', label: 'Услуги' },
       { href: '/board', label: 'Доска помощи' },
+      { href: '/orders', label: 'Заказы' },
       { href: '/activity', label: 'Мои дела' },
       { href: '/wallet', label: 'Кошелёк' }
     ],
