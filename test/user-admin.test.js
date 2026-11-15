@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { changeUserRole, anonymizeUser } = require('../src/services/user-admin');
+const { changeUserRole, anonymizeUser, hasOpenActivities } = require('../src/services/user-admin');
 
 test('administrator can assign a student to a teacher role and class', () => {
   const user = { id: 'u1', role: 'student', class_name: '8А' };
@@ -55,4 +55,18 @@ test('account removal requires a reason', () => {
   assert.throws(() => anonymizeUser({ id: 'u5', role: 'student' }, {
     actorId: 'admin-1', reason: '', now: '2026-11-15T00:00:00.000Z', passwordHash: 'hash'
   }), { code: 'fields' });
+});
+
+test('account removal is blocked while deals or marketplace orders are open', () => {
+  assert.equal(hasOpenActivities('u6', [
+    { buyer_id: 'u6', seller_id: 'u7', status: 'in_progress' }
+  ], []), true);
+  assert.equal(hasOpenActivities('u6', [], [
+    { buyer_id: 'u7', seller_id: 'u6', status: 'disputed' }
+  ]), true);
+  assert.equal(hasOpenActivities('u6', [
+    { buyer_id: 'u6', seller_id: 'u7', status: 'completed' }
+  ], [
+    { buyer_id: 'u7', seller_id: 'u6', status: 'refunded' }
+  ]), false);
 });
