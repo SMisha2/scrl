@@ -92,7 +92,7 @@ function pageAuctions(res, user, url) {
       return `<div class="card">
         <div class="row-between">
           <div><h3>${esc(a.title)}</h3><div class="muted small">Приз: ${esc(a.prize)}</div>
-            <div class="small mt-1">Лидер: <b>${esc(leader ? leader.full_name : '—')}</b> · ставка ${a.current_bid} · шаг ${a.min_step}</div></div>
+            <div class="small mt-1">Лидер: <b>${esc(leader ? leader.full_name : 'Нет лидера')}</b> · ставка ${a.current_bid} · шаг ${a.min_step}</div></div>
           <div style="text-align:right"><div class="muted small">до конца</div><div>${new Date(a.ends_at).toLocaleString('ru-RU')}</div></div>
         </div>
         ${canBid ? `<form method="POST" action="/auctions/bid" class="row mt-2"><input type="hidden" name="auction_id" value="${a.id}"><input name="amount" type="number" min="${minNext}" required placeholder="мин. ${minNext}" style="flex:1;max-width:160px;margin:0"><button class="btn btn-accent btn-sm">Сделать ставку</button></form>` : ''}
@@ -107,7 +107,7 @@ function pageAuctions(res, user, url) {
         .sort((m, n) => n.created_at.localeCompare(m.created_at)).slice(0, 5)
         .map(b => {
           const bidder = state.users.find(u => u.id === b.bidder_id);
-          return '<li class="small">' + esc(bidder ? bidder.full_name : 'Участник') + ' — ' + b.amount + ' ScRl (' + esc(b.status) + ')</li>';
+          return '<li class="small">' + esc(bidder ? bidder.full_name : 'Участник') + ': ' + b.amount + ' ScRl (' + esc(b.status) + ')</li>';
         }).join('');
       return '<div class="card"><div class="row-between"><b>' + esc(x.title) + '</b><span class="badge badge-muted">Завершён</span></div>' +
         '<p class="muted small">Приз: ' + esc(x.prize) + ' · Победитель: ' + esc(winner ? winner.full_name : 'Нет ставок') + ' · ' + x.current_bid + ' ScRl</p>' +
@@ -128,7 +128,7 @@ function pageAuctions(res, user, url) {
     </form></div>` : '';
   sendHtml(res, layout('Аукционы', user, `
     ${flashBox(url)}
-    <h1>Аукционы ScRl</h1><p class="muted">Ставки — только внутренние ScRl. Денежные ставки и денежные призы отключены.</p>
+    <h1>Аукционы ScRl</h1><p class="muted">Ставки используют только внутренние ScRl. Денежные ставки и денежные призы отключены.</p>
     ${createForm}
     <h2 class="mt-2">Активные</h2>
     ${items || '<p class="muted">Активных аукционов нет</p>'}
