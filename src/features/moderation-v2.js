@@ -133,7 +133,7 @@ function pageModeration(res, user, url) {
       '<td class="small">' + esc(entry.reason || '—') + '</td></tr>';
   }).join('');
   sendHtml(res, layout('Модерация', user, flashBox(url) +
-    '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted">Автофильтр — это сигнал, а не доказательство нарушения. Решения остаются за администратором.</p></div><a class="btn btn-primary" href="/admin/ai">Помощник</a></div>' +
+    '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted">Автофильтр — это сигнал, а не доказательство нарушения. Решения остаются за администратором.</p></div><div class="row"><form method="POST" action="/admin/moderation/scan"><button class="btn btn-ghost">Повторно проверить публикации</button></form><a class="btn btn-primary" href="/admin/ai">Помощник</a></div></div>' +
     metrics + search + '<h2 class="mt-2">Проверки и споры (' + cases.length + ')</h2>' +
     (caseHtml || '<div class="card"><p class="muted">Открытых проверок нет.</p></div>') +
     '<h2 class="mt-2">Жалобы пользователей (' + reports.length + ')</h2>' +
@@ -141,6 +141,66 @@ function pageModeration(res, user, url) {
     '<h2 class="mt-2">Журнал действий модераторов</h2>' +
     (auditRows ? '<div class="card" style="overflow-x:auto"><table><thead><tr><th>Дата</th><th>Администратор</th><th>Действие</th><th>Объект</th><th>Причина</th></tr></thead><tbody>' + auditRows + '</tbody></table></div>' :
       '<div class="card"><p class="muted">Действий пока нет.</p></div>')));
+}
+
+function handleModerationScan(res, user) {
+  if (user.role !== 'admin') return redirect(res, '/');
+  const sources = [
+    ...state.demand_posts.filter(item => item.status === 'active').map(item => ({ kind: 'post', postKind: 'demand', item })),
+    ...state.offer_posts.filter(item => item.status === 'active').map(item => ({ kind: 'post', postKind: 'offer', item })),
+    ...state.listings.filter(item => item.status === 'active').map(item => ({ kind: 'listing', postKind: null, item }))
+  ];
+  const now = new Date().toISOString();
+  let flagged = 0;
+  let createdCases = 0;
+
+  for (const source of sources) {
+    const result = analyseText([
+      source.item.title,
+      source.item.description,
+      source.item.category
+    ].filter(Boolean).join('\n'));
+    if (!result.requiresReview) continue;
+
+    flagged += 1;
+    source.item.status = 'pending';
+    source.item.moderation_level = result.level;
+    source.item.moderation_findings = result.findings;
+    source.item.moderation_rescanned_at = now;
+    source.item.updated_at = now;
+
+    const exists = state.moderation_cases.some(entry =>
+      entry.status === 'open' && entry.kind === source.kind &&
+      entry.target_id === source.item.id &&
+      (source.kind !== 'post' || entry.post_kind === source.postKind)
+    );
+    if (!exists) {
+      state.moderation_cases.unshift({
+        id: crypto.randomUUID(), kind: source.kind, post_kind: source.postKind,
+        target_id: source.item.id, status: 'open',
+        reason: result.findings.map(item => item.label).join('; '),
+        recommendation: result.recommendation,
+        created_at: now, scan_source: 'manual_rescan'
+      });
+      createdCases += 1;
+    }
+
+    const ownerId = source.kind === 'listing' ? source.item.seller_id : source.item.user_id;
+    notify(ownerId, 'moderation', 'Публикация отправлена на повторную проверку',
+      'Автоматическая проверка отметила публикацию. Она временно скрыта до решения модератора.',
+      source.kind === 'listing' ? '/market' : source.postKind === 'offer' ? '/offers' : '/demand');
+  }
+
+  audit(user, 'moderation_rescan', null,
+    'Scanned: ' + sources.length + '; flagged: ' + flagged + '; new cases: ' + createdCases);
+  save();
+  if (flagged > 0) {
+    state.users.filter(item => item.role === 'admin' && item.id !== user.id).forEach(admin =>
+      notify(admin.id, 'moderation', 'Завершено повторное сканирование',
+        'Проверено публикаций: ' + sources.length + '. Требуют проверки: ' + flagged + '.', '/admin/moderation')
+    );
+  }
+  return redirect(res, '/admin/moderation?msg=scan&scanned=' + sources.length + '&flagged=' + flagged);
 }
 
 function handleModerationAction(res, user, params) {
@@ -361,4 +421,4 @@ function handleAiChat(res, user, params) {
   return redirect(res, '/admin/ai');
 }
 
-module.exports = { pageModeration, handleModerationAction, handleReportAction, pageAiChat, handleAiChat, answerAdminQuestion };
+module.exports = { pageModeration, handleModerationScan, handleModerationAction, handleReportAction, pageAiChat, handleAiChat, answerAdminQuestion };
