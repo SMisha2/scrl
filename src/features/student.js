@@ -1,4 +1,4 @@
-const { state, balance } = require('../store');
+const { state, balance, systemAccount } = require('../store');
 const { ageStatus, canTrade } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
@@ -8,49 +8,83 @@ function pageApp(res, user, url) {
   const av = balance(user.id, 'available');
   const hd = balance(user.id, 'held');
   const vr = balance(user.id, 'vrub');
+  const tradeable = canTrade(user);
+  const rateValue = Number(state.settings && state.settings.token_exchange_rate);
+  const rate = Number.isFinite(rateValue) && rateValue > 0 ? rateValue : 1;
+  const reserve = systemAccount('reserve');
+  const reserveBalance = reserve ? reserve.balance : 0;
   const recent = state.entries
     .filter(e => {
       const acc = state.accounts.find(a => a.id === e.account_id);
       return acc && acc.user_id === user.id && acc.kind === 'available' && e.amount !== 0;
     })
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 8)
+    .slice(0, 6)
     .map(e => {
       const tx = state.transactions.find(t => t.id === e.tx_id);
-      return `<li class="row-between" style="padding:8px 0;border-bottom:1px solid #E7E5E4;font-size:14px">
-        <span class="muted">${esc(tx ? tx.kind : '')}</span>
-        <span class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${e.amount}</span></li>`;
+      return `<li class="row-between" style="padding:9px 0;border-bottom:1px solid var(--border);font-size:14px">
+        <span class="muted">${esc(tx ? tx.kind : 'Операция')}</span>
+        <b class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${e.amount} ScRl</b></li>`;
     }).join('');
   const activeOrders = state.orders
     .filter(o => (o.buyer_id === user.id || o.seller_id === user.id) && ['awaiting_delivery', 'awaiting_confirmation'].includes(o.status))
     .slice(0, 5)
-    .map(o => `<li class="row-between" style="padding:6px 0;border-bottom:1px solid #E7E5E4;font-size:14px">
+    .map(o => `<li class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">
       <span>${o.buyer_id === user.id ? 'Покупка' : 'Продажа'}</span>
       <span class="muted">${o.price} ScRl</span>
-      <span class="badge badge-muted">${o.status}</span></li>`).join('');
-  const tradeable = canTrade(user);
+      <span class="badge badge-muted">${esc(o.status)}</span></li>`).join('');
 
   sendHtml(res, layout('Главная', user, `
     ${flashBox(url)}
-    <div class="card balance">
-      <div class="muted small">Доступно</div>
-      <div style="font-size:36px;font-weight:700;margin:4px 0">🪙 ${av} ScRl</div>
-      <div class="small">Заблокировано: ${hd} · Вирт. рубли: ${vr}</div>
+    <div class="row-between" style="margin-bottom:16px;align-items:end">
+      <div><h1 style="margin-bottom:2px">Главная</h1><p class="muted">Всё важное — в одном месте</p></div>
+      <span class="badge badge-primary-soft">Личный кабинет</span>
     </div>
-    ${!tradeable ? `<div class="alert alert-info">Покупки и аукционы доступны с 14 лет. Вы можете получать токены и просматривать маркет.</div>` : ''}
-    <div class="grid grid-3">
-      <a href="/marketplace" class="card" style="text-decoration:none;color:inherit"><b>Каталог</b><div class="muted small">Спрос и предложения</div></a>
-      <a href="/demand" class="card" style="text-decoration:none;color:inherit"><b>Мне нужно</b><div class="muted small">Создать запрос</div></a>
-      <a href="/offer" class="card" style="text-decoration:none;color:inherit"><b>Я могу</b><div class="muted small">Опубликовать навык</div></a>
-      <a href="/deals" class="card" style="text-decoration:none;color:inherit"><b>Мои сделки</b><div class="muted small">Статусы и переписка</div></a>
-      <a href="/auctions" class="card" style="text-decoration:none;color:inherit"><b>Аукционы</b><div class="muted small">Внутренние ставки ScRl</div></a>
-      <a href="/notifications" class="card" style="text-decoration:none;color:inherit"><b>Уведомления</b><div class="muted small">Отклики и сообщения</div></a>
+    <section class="card balance" style="padding:24px">
+      <div class="row-between">
+        <div>
+          <div class="muted small">Ваш кошелёк · доступно</div>
+          <div style="font-size:34px;font-weight:750;letter-spacing:-1px;margin:5px 0">🪙 ${av.toLocaleString('ru-RU')} ScRl</div>
+          <div class="muted small">В резерве сделок: ${hd.toLocaleString('ru-RU')} ScRl</div>
+        </div>
+        <a class="btn btn-primary" href="/wallet">Открыть кошелёк <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="grid grid-3 mt-2">
+        <div><div class="muted small">Доступно</div><b>${av.toLocaleString('ru-RU')} ScRl</b></div>
+        <div><div class="muted small">Заблокировано</div><b>${hd.toLocaleString('ru-RU')} ScRl</b></div>
+        <div><div class="muted small">Виртуальные рубли</div><b>${vr.toLocaleString('ru-RU')} V-RUB</b></div>
+      </div>
+    </section>
+    ${!tradeable ? `<div class="alert alert-info">Покупки и аукционы доступны с 14 лет. Вы можете просматривать доску и получать токены.</div>` : ''}
+    <div class="grid grid-4 mt-2">
+      <a href="/board" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">01 · Сообщество</span><h2 class="mt-1">Общая доска</h2><p class="muted small">Ищу помощь и предлагаю свои навыки</p></a>
+      <a href="/activity" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">02 · Работа</span><h2 class="mt-1">Активность</h2><p class="muted small">Отклики, сделки и сообщения</p></a>
+      <a href="/exchange" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">03 · Обмен</span><h2 class="mt-1">Биржа</h2><p class="muted small">ScRl и виртуальные рубли</p></a>
+      <a href="/auctions" class="card" style="display:block;color:inherit;text-decoration:none"><span class="muted small">04 · События</span><h2 class="mt-1">Аукционы</h2><p class="muted small">Внутренние ставки ScRl</p></a>
     </div>
     <div class="grid grid-2 mt-2">
-      <div class="card"><h2>Последние операции</h2>${recent ? `<ul style="list-style:none">${recent}</ul>` : '<p class="muted small">Пока пусто</p>'}</div>
-      <div class="card"><h2>Активные заказы</h2>${activeOrders ? `<ul style="list-style:none">${activeOrders}</ul>` : '<p class="muted small">Нет заказов</p>'}<a href="/orders" class="mt-1">Все заказы →</a></div>
-    </div>`));
+      <section class="card">
+        <div class="row-between"><h2>Последние операции</h2><a class="small" href="/wallet">В кошелёк →</a></div>
+        ${recent ? `<ul style="list-style:none">${recent}</ul>` : '<p class="muted small">Операций пока нет.</p>'}
+      </section>
+      <section class="card">
+        <div class="row-between"><h2>Активные сделки</h2><a class="small" href="/activity#deals">Все →</a></div>
+        ${activeOrders ? `<ul style="list-style:none">${activeOrders}</ul>` : '<p class="muted small">Нет активных заказов.</p>'}
+      </section>
+    </div>
+    <section class="card mt-2">
+      <div class="row-between">
+        <div><h2>Курс токена и резерв</h2><p class="muted small">Внутренний ориентир ScRl · не курс реальных денег</p></div>
+        <a class="btn btn-ghost btn-sm" href="/exchange">Открыть биржу</a>
+      </div>
+      <div class="grid grid-2 mt-1">
+        <div><div class="muted small">Справочный курс</div><div style="font-size:23px;font-weight:700">1 ScRl = ${rate.toLocaleString('ru-RU', {minimumFractionDigits:2,maximumFractionDigits:2})} RUB*</div></div>
+        <div><div class="muted small">Резерв ScRl</div><div style="font-size:23px;font-weight:700">${reserveBalance.toLocaleString('ru-RU')} ScRl</div></div>
+      </div>
+      <p class="muted small mt-1">* Расчётное значение для внутренней симуляции. Оно не означает возможность обменять токены на реальные рубли.</p>
+    </section>`));
 }
+
 
 
 function pageWallet(res, user, url) {
