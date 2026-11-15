@@ -6,6 +6,19 @@ const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { analyseText } = require('../services/moderation-rules');
 const { notify } = require('../utils/notifications');
+function orderEscrow(orderId, buyerId) {
+  const held = state.accounts.find(item => item.user_id === buyerId && item.kind === 'held');
+  if (!held) return { amount: 0, held: null };
+  const ids = new Set(state.transactions
+    .filter(tx => tx.payload && tx.payload.orderId === orderId)
+    .map(tx => tx.id));
+  const amount = state.entries
+    .filter(entry => ids.has(entry.tx_id) && entry.account_id === held.id)
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const settled = state.transactions.some(tx => tx.kind === 'order_settle' && tx.payload && tx.payload.orderId === orderId);
+  return { amount, held, settled };
+}
+
 function pageMarket(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const tradeable = canTrade(user);
@@ -109,26 +122,35 @@ function handleDeleteListing(res, user, params) {
 function handleBuyListing(res, user, params) {
   if (user.role !== 'student' || !canTrade(user)) return redirect(res, '/market?error=age');
   const listingId = params.get('listing_id');
-  const listing = state.listings.find(l => l.id === listingId && l.status === 'active');
+  const listing = state.listings.find(item => item.id === listingId && item.status === 'active');
   if (!listing) return redirect(res, '/market?error=notfound');
   if (listing.seller_id === user.id) return redirect(res, '/market?error=own');
   const seller = state.users.find(item => item.id === listing.seller_id);
   if (!seller || !canTrade(seller)) return redirect(res, '/market?error=age');
-  if (!Number.isSafeInteger(listing.price) || listing.price < 1 || balance(user.id, 'available') < listing.price) return redirect(res, '/market?error=insufficient');
+  if (!Number.isSafeInteger(listing.price) || listing.price < 1 ||
+      balance(user.id, 'available') < listing.price) return redirect(res, '/market?error=insufficient');
 
   const orderId = crypto.randomUUID();
-  recordTx('order_hold', user.id, { orderId, listingId, amount: listing.price }, [
-    { accountId: account(user.id, 'available').id, amount: -listing.price, note: 'Покупка' },
-    { accountId: account(user.id, 'held').id, amount: listing.price, note: 'Escrow' }
-  ]);
-  state.orders.push({
+  const order = {
     id: orderId, listing_id: listingId, buyer_id: user.id, seller_id: listing.seller_id,
     price: listing.price, commission: Math.floor(listing.price * 0.1),
     status: 'awaiting_delivery', created_at: new Date().toISOString()
-  });
+  };
+  state.orders.unshift(order);
   listing.status = 'in_progress';
-  save();
-  redirect(res, '/orders?msg=purchased');
+  try {
+    recordTx('order_hold', user.id, { orderId, listingId, amount: listing.price }, [
+      { accountId: account(user.id, 'available').id, amount: -listing.price, note: 'Покупка' },
+      { accountId: account(user.id, 'held').id, amount: listing.price, note: 'Escrow' }
+    ]);
+  } catch (error) {
+    state.orders = state.orders.filter(item => item.id !== orderId);
+    listing.status = 'active';
+    save();
+    console.error('Marketplace order hold failed:', error.message);
+    return redirect(res, '/market?error=hold');
+  }
+  return redirect(res, '/orders?msg=purchased');
 }
 
 
@@ -187,21 +209,45 @@ function handleDeliver(res, user, params) {
 
 function handleConfirm(res, user, params) {
   const orderId = params.get('order_id');
-  const order = state.orders.find(o => o.id === orderId);
-  if (!order || order.buyer_id !== user.id || order.status !== 'awaiting_confirmation') return redirect(res, '/orders?error=bad');
-  const commission = Math.floor(order.price * 0.1);
-  const sellerAmount = order.price - commission;
-  recordTx('order_settle', user.id, { orderId, price: order.price, commission }, [
-    { accountId: account(order.buyer_id, 'held').id, amount: -order.price, note: 'Escrow' },
-    { accountId: account(order.seller_id, 'available').id, amount: sellerAmount, note: 'Выплата' },
-    { accountId: systemAccount('burn').id, amount: commission, note: 'Комиссия 10%' }
-  ]);
-  order.status = 'completed';
-  order.confirmed_at = new Date().toISOString();
-  const listing = state.listings.find(l => l.id === order.listing_id);
+  const order = state.orders.find(item => item.id === orderId);
+  if (!order || order.buyer_id !== user.id || order.status !== 'awaiting_confirmation') {
+    return redirect(res, '/orders?error=bad');
+  }
+  const price = Number(order.price);
+  if (!Number.isSafeInteger(price) || price < 1) return redirect(res, '/orders?error=order');
+
+  const escrow = orderEscrow(order.id, order.buyer_id);
+  if (escrow.settled) {
+    order.status = 'completed';
+  } else {
+    if (!escrow.held || escrow.amount !== price || escrow.held.balance < price) {
+      return redirect(res, '/orders?error=escrow');
+    }
+    const commission = Math.floor(price * 0.1);
+    const sellerAmount = price - commission;
+    const entries = [
+      { accountId: escrow.held.id, amount: -price, note: 'Escrow' },
+      { accountId: account(order.seller_id, 'available').id, amount: sellerAmount, note: 'Выплата' }
+    ];
+    if (commission > 0) {
+      const burn = systemAccount('burn');
+      if (!burn) return redirect(res, '/orders?error=ledger');
+      entries.push({ accountId: burn.id, amount: commission, note: 'Комиссия 10%' });
+    }
+    try {
+      recordTx('order_settle', user.id, { orderId, price, commission }, entries);
+    } catch (error) {
+      console.error('Marketplace order settlement failed:', error.message);
+      return redirect(res, '/orders?error=settlement');
+    }
+    order.status = 'completed';
+  }
+
+  order.confirmed_at = order.confirmed_at || new Date().toISOString();
+  const listing = state.listings.find(item => item.id === order.listing_id);
   if (listing) listing.status = 'completed';
   save();
-  redirect(res, '/orders?msg=confirmed');
+  return redirect(res, '/orders?msg=confirmed');
 }
 
 
