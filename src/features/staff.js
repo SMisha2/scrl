@@ -285,7 +285,7 @@ function pageAdminUsers(res, user, url) {
         : '';
       const deleteForm =
         '<details class="admin-delete"><summary>Удалить аккаунт</summary>' +
-          '<p class="muted small">Профиль и вход будут удалены. Активные объявления закроются. Финансовая история и данные завершённых сделок останутся в обезличенном виде.</p>' +
+          '<p class="muted small">Профиль и вход будут удалены. Активные объявления закроются. Финансовая история и данные завершённых сделок останутся в обезличенном виде. Остатки на счетах не обнуляются.</p>' +
           '<form method="POST" action="/admin/delete">' +
             '<input type="hidden" name="user_id" value="' + esc(person.id) + '">' +
             '<label>Причина удаления</label><input name="reason" maxlength="300" required placeholder="Укажите причину">' +
@@ -492,6 +492,15 @@ function handleDeleteUser(res, admin, params) {
   }
   const reason = (params.get('reason') || '').trim().slice(0, 300);
   if (!reason) return redirect(res, '/admin/users?error=fields');
+  const activeDeals = (state.deals || []).some(deal =>
+    [deal.buyer_id, deal.seller_id].includes(target.id) &&
+    ['accepted', 'in_progress', 'awaiting_confirmation', 'disputed'].includes(deal.status)
+  );
+  const activeOrders = (state.orders || []).some(order =>
+    [order.buyer_id, order.seller_id].includes(target.id) &&
+    ['awaiting_delivery', 'awaiting_confirmation', 'disputed'].includes(order.status)
+  );
+  if (activeDeals || activeOrders) return redirect(res, '/admin/users?error=active_work');
   if (params.get('confirmation') !== 'УДАЛИТЬ') {
     return redirect(res, '/admin/users?error=confirmation');
   }
@@ -524,6 +533,13 @@ function handleDeleteUser(res, admin, params) {
       listing.status = 'removed';
       listing.removed_at = now;
       listing.removed_by = admin.id;
+    }
+  }
+  for (const application of (state.applications || [])) {
+    if ([application.owner_id, application.applicant_id].includes(target.id) && application.status === 'pending') {
+      application.status = 'declined';
+      application.updated_at = now;
+      application.closed_by_user_removal = true;
     }
   }
   state.admin_audit_logs.push({
