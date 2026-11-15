@@ -5,7 +5,7 @@ const LEGACY_SALT = 'scrl-salt-v1';
 
 function hashPassword(password) {
   const value = String(password);
-  if (value.length < 8 || value.length > 1024) throw new Error('Password length must be between 8 and 1024 characters');
+  if (value.length < 6 || value.length > 1024) throw new Error('Password length must be between 6 and 1024 characters');
   const salt = crypto.randomBytes(16);
   const derived = crypto.scryptSync(value, salt, SCRYPT.keyLength, SCRYPT);
   return ['scrypt', SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString('base64url'), derived.toString('base64url')].join('$');
