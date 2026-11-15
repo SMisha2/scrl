@@ -293,11 +293,12 @@ function handleReportAction(res, user, params) {
   messages.push({ id: meta.reporterId, title: 'Жалоба рассмотрена',
     body: decision === 'dismiss' ? 'По результатам проверки оснований для удаления публикации не найдено.' :
       'Модератор рассмотрел жалобу и принял меры.', href: '/notifications' });
+  const targetId = meta.postId || meta.listingId || report.target_id || null;
   state.moderation_actions.push({
     id: crypto.randomUUID(), case_id: null, report_id: report.id,
-    admin_id: user.id, action: decision, target_id: meta.postId, created_at: now
+    admin_id: user.id, action: decision, target_id: targetId, created_at: now
   });
-  audit(user, 'report_' + decision, meta.postId, report.reason);
+  audit(user, 'report_' + decision, targetId, report.reason);
   save();
   for (const message of messages) notify(message.id, 'moderation', message.title, message.body, message.href);
   return redirect(res, '/admin/moderation?msg=reviewed');
