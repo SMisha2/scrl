@@ -3,6 +3,7 @@ const { state, save } = require('../store');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
+const { notify } = require('../utils/notifications');
 
 function handleReportPost(res, user, params) {
   if (user.role !== 'student') return redirect(res, '/');
@@ -19,10 +20,8 @@ function handleReportPost(res, user, params) {
     status: 'open', created_at: new Date().toISOString()
   });
   state.admin_audit_logs.push({ id: crypto.randomUUID(), actor_id: user.id, action: 'post_reported', target_id: postId, reason: 'User report', created_at: new Date().toISOString() });
+  state.users.filter(u => u.role === 'admin').forEach(a => notify(a.id, 'moderation', 'Новая жалоба', 'Поступила жалоба на публикацию «' + post.title + '».', '/admin/moderation'));
   save();
-  state.users.filter(u => u.role === 'admin').forEach(a => {
-    // notification records are created by the moderation queue page on review
-  });
   return redirect(res, kind === 'offer' ? '/offers?msg=reported' : '/demand?msg=reported');
 }
 
