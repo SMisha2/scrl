@@ -29,11 +29,12 @@ function postCard(post, type, user, showApply) {
   const owner = state.users.find(x => x.id === post.user_id);
   const favorite = state.favorites.some(x => x.user_id === user.id && x.post_id === post.id && x.post_type === type);
   const applications = state.applications.filter(x => x.post_id === post.id && x.post_type === type).length;
+  const demoBadge = post.is_demo ? '<span class="badge badge-muted">DEMO</span>' : '';
   const action = post.user_id === user.id
     ? '<span class="badge badge-muted">Ваше объявление</span>'
     : (showApply ? '<form method="POST" action="/posts/apply" class="mt-1"><input type="hidden" name="post_id" value="' + post.id + '"><input type="hidden" name="post_type" value="' + type + '"><label>Сообщение</label><textarea name="message" rows="2" maxlength="500" required placeholder="Коротко расскажите, чем можете помочь"></textarea><label>Ваше предложение, ScRl (необязательно)</label><input name="offered_price" type="number" min="0" step="1" placeholder="Оставьте пустым, если цена не важна"><button class="btn btn-primary btn-sm">Откликнуться</button></form>' : '');
   return '<article class="card">' +
-    '<div class="row-between"><div><span class="badge badge-primary-soft">' + (type === 'demand' ? 'Спрос' : 'Предложение') + '</span> <span class="badge badge-muted">' + esc(post.category || 'Другое') + '</span></div>' +
+    '<div class="row-between"><div><span class="badge badge-primary-soft">' + (type === 'demand' ? 'Спрос' : 'Предложение') + '</span> <span class="badge badge-muted">' + esc(post.category || 'Другое') + '</span> ' + demoBadge + '</div>' +
     '<span class="muted small">' + new Date(post.created_at).toLocaleDateString('ru-RU') + '</span></div>' +
     '<h2 class="mt-1">' + esc(post.title) + '</h2><p>' + esc(post.description) + '</p>' +
     '<div class="row-between mt-1"><div><b class="accent">' + priceLabel(post) + '</b><div class="muted small">' + esc(owner ? owner.full_name : 'Участник') + (owner && owner.class_name ? ' · ' + esc(owner.class_name) : '') + '</div></div>' +
@@ -213,7 +214,7 @@ function handleDealAction(res,user,params) {
   } else if(action==='dispute'&&(deal.status==='in_progress'||deal.status==='waiting_confirmation')){
     deal.status='disputed';
     state.reports.push({id:crypto.randomUUID(),reporter_id:user.id,target_type:'deal',target_id:deal.id,reason:'Спор по сделке',status:'open',created_at:new Date().toISOString()});
-    notify(null,'moderation','Новый спор','Сделка требует решения администратора.','/admin/moderation');
+    state.users.filter(x=>x.role==='admin').forEach(admin=>notify(admin.id,'moderation','Новый спор','Сделка требует решения администратора.','/admin/moderation'));
   } else return redirect(res,'/deals?error=bad');
   save(); redirect(res,'/deals?msg=delivered');
 }
@@ -281,10 +282,12 @@ function handleProfileUpdate(res,user,params) {
 function handleReport(res,user,params) {
   const targetType=params.get('target_type'), targetId=params.get('target_id');
   const reason=(params.get('reason')||'').trim();
+  if(!['post','deal'].includes(targetType)) return redirect(res,'/marketplace?error=bad');
   if(!reason||reason.length<5||reason.length>240) return redirect(res,'/marketplace?error=fields');
   if(targetType==='post'&&!findPost(targetId,params.get('post_type'))) return redirect(res,'/marketplace?error=notfound');
   if(targetType==='deal'&&!state.deals.some(x=>x.id===targetId&&(x.buyer_id===user.id||x.seller_id===user.id))) return redirect(res,'/deals?error=bad');
   state.reports.push({id:crypto.randomUUID(),reporter_id:user.id,target_type:targetType,target_id:targetId,post_type:params.get('post_type')||null,reason:reason.slice(0,240),status:'open',created_at:new Date().toISOString()});
+  state.users.filter(x=>x.role==='admin').forEach(admin=>notify(admin.id,'report','Новая жалоба','Поступила новая жалоба; откройте очередь модерации.','/admin/moderation'));
   save(); redirect(res,'/notifications');
 }
 
