@@ -98,6 +98,12 @@ function pageWallet(res, user, url) {
         <td>${esc(tx ? tx.kind : '')}</td><td class="muted">${esc(e.note || '')}</td>
         <td style="text-align:right" class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${e.amount}</td></tr>`;
     }).join('');
+  const vrubRows = (state.vrub_ledger_entries || [])
+    .filter(entry => entry.user_id === user.id && ['initial_grant', 'opening_balance'].includes(entry.event_type) && Number(entry.amount) > 0)
+    .map(entry => '<tr><td class="muted small">' + new Date(entry.created_at).toLocaleString('ru-RU') + '</td>' +
+      '<td>Начальный баланс V-RUB</td><td class="muted">' + esc(entry.reason || 'Стартовое начисление') + '</td>' +
+      '<td style="text-align:right" class="badge badge-success">+' + Number(entry.amount).toLocaleString('ru-RU') + ' V-RUB</td></tr>').join('');
+  const historyRows = [rows, vrubRows].filter(Boolean).join('');
   sendHtml(res, layout('Кошелёк', user, `
     ${flashBox(url)}
     <h1>Кошелёк</h1>
@@ -110,7 +116,7 @@ function pageWallet(res, user, url) {
     </div>
     <div class="row mt-1"><a class="btn btn-ghost btn-sm" href="/exchange">Открыть биржу ScRl / V-RUB</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a></div>
     <div class="card"><h2>История операций</h2>
-      ${rows ? `<table><thead><tr><th>Дата</th><th>Тип</th><th>Комментарий</th><th style="text-align:right">Сумма</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">Пока пусто</p>'}
+      ${historyRows ? `<table><thead><tr><th>Дата</th><th>Тип</th><th>Комментарий</th><th style="text-align:right">Сумма</th></tr></thead><tbody>${historyRows}</tbody></table>` : '<p class="muted">Пока пусто</p>'}
     </div>`));
 }
 
