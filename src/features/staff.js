@@ -66,7 +66,7 @@ function handleIssue(res, user, params) {
     ]);
   } catch (error) {
     console.error('Teacher credit failed:', error.message);
-    return redirect(res, '/teacher?error=ledger');
+    return redirect(res, error.code === 'backing_limit' ? '/teacher?error=backing_limit' : '/teacher?error=ledger');
   }
   return redirect(res, '/teacher?msg=issued');
 }
@@ -181,7 +181,7 @@ function handleCredit(res, admin, params) {
     ]);
   } catch (error) {
     console.error('Admin credit failed:', error.message);
-    return redirect(res, '/admin/users?error=ledger');
+    return redirect(res, error.code === 'backing_limit' ? '/admin/users?error=backing_limit' : '/admin/users?error=ledger');
   }
   state.admin_audit_logs.push({
     id: crypto.randomUUID(), actor_id: admin.id,
