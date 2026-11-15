@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-const { DATA_FILE } = require('./config');
+const { DATA_DIR, DATA_FILE, LEGACY_DATA_FILE } = require('./config');
 const { hashPassword } = require('./security');
 function seedData() {
   const now = new Date().toISOString();
@@ -68,6 +68,13 @@ function seedData() {
   return s;
 }
 
+
+// Create the target directory and copy the old file once when moving to a mounted disk.
+// Never overwrite an existing file on the disk.
+fs.mkdirSync(DATA_DIR, { recursive: true });
+if (DATA_FILE !== LEGACY_DATA_FILE && !fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
+  fs.copyFileSync(LEGACY_DATA_FILE, DATA_FILE, fs.constants.COPYFILE_EXCL);
+}
 
 let state;
 if (fs.existsSync(DATA_FILE)) {
