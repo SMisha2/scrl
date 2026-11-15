@@ -89,7 +89,7 @@ tbody tr:last-child td{border-bottom:0}
 .progress{height:4px;margin-top:8px;overflow:hidden;background:var(--surface-soft)}
 .progress-bar{height:100%;background:var(--accent)}
 .theme-toggle{white-space:nowrap}
-.home-greeting{margin-bottom:28px}
+.home-greeting{margin-bottom:22px}
 .link-button{display:inline;padding:0;border:0;background:transparent;color:var(--accent);font-size:12px;font-weight:550;cursor:pointer;text-decoration:none}
 .link-button:hover{text-decoration:underline;text-underline-offset:3px}
 .post-status{margin-left:2px;color:var(--warm);font-size:11px}
@@ -105,21 +105,12 @@ tbody tr:last-child td{border-bottom:0}
 .board-count{padding-top:12px}
 @media(max-width:760px){.suggestion-row{align-items:flex-start;flex-direction:column;gap:8px}.suggestion-row .respond-form{min-width:0;width:100%}.respond-form{min-width:0;width:100%}.post-footer{align-items:flex-start!important;flex-direction:column}.post-actions{width:100%}}
 
-.home-greeting p{margin-top:6px;color:var(--muted);font-size:14px}
 .home-balances{display:flex;align-items:flex-end;gap:34px;padding:0 0 21px;border-bottom:1px solid var(--border);margin-bottom:22px}
 .home-balance{display:flex;flex-direction:column;gap:1px}
 .home-balance small{color:var(--muted);font-size:11px}
 .home-balance strong{font-size:25px;font-weight:650;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .home-balance-secondary strong{font-size:19px}
 .home-actions{display:flex;align-items:center;gap:22px;margin:0 0 32px}
-.earn-guide{padding:18px 20px;margin:0 0 28px;border-radius:10px;background:var(--accent-soft)}
-.earn-guide-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
-.earn-guide-heading h2{margin:0;font-size:15px}
-.earn-guide-heading p{margin:4px 0 0;color:var(--muted);font-size:12px}
-.earn-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px;margin-top:15px}
-.earn-guide-item b{display:block;margin-bottom:3px;color:var(--text);font-size:13px;font-weight:650}
-.earn-guide-item p{color:var(--muted);font-size:12px;line-height:1.55}
-.earn-guide-item a{font-weight:600}
 .home-actions a{font-size:14px;font-weight:600}
 .home-sections{display:grid;grid-template-columns:1.2fr .8fr;gap:52px}
 .home-section-title{padding-bottom:9px;border-bottom:1px solid var(--border);margin-bottom:0;font-size:13px;font-weight:650}
@@ -186,9 +177,6 @@ tbody tr:last-child td{border-bottom:0}
  .home-balance strong{font-size:22px}
  .home-balance-secondary strong{font-size:17px}
  .home-actions{gap:17px;flex-wrap:wrap;margin-bottom:24px}
- .earn-guide{padding:16px;margin-bottom:24px}
- .earn-guide-grid{grid-template-columns:1fr;gap:12px}
- .earn-guide-heading{align-items:flex-start;flex-direction:column;gap:5px}
  .home-sections{grid-template-columns:1fr;gap:26px}
  .board-toolbar{align-items:stretch}
  .board-toolbar form{align-items:stretch;display:grid;grid-template-columns:1fr 1fr}
