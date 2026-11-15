@@ -18,7 +18,16 @@ function auctionEscrowBalance(auctionId, userId) {
 function autoFinishAuctions() {
   let changed = false;
   for (const auction of state.auctions) {
-    if (auction.status !== 'active' || new Date(auction.ends_at).getTime() >= Date.now()) continue;
+    if (auction.status !== 'active') continue;
+    const endTime = new Date(auction.ends_at).getTime();
+    if (!Number.isFinite(endTime)) {
+      auction.status = 'settlement_error';
+      auction.settlement_error = 'Некорректная дата завершения аукциона.';
+      auction.settlement_error_at = new Date().toISOString();
+      changed = true;
+      continue;
+    }
+    if (endTime >= Date.now()) continue;
 
     if (auction.current_winner_id && Number(auction.current_bid) > 0) {
       const existing = state.transactions.find(tx => tx.kind === 'auction_burn' && tx.payload && tx.payload.auctionId === auction.id);
