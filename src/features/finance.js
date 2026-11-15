@@ -4,6 +4,7 @@ const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { notify } = require('../utils/notifications');
+const { getTokenMarketStats, recordTokenRateCandle } = require('../services/token-market');
 
 function paymentMode() {
   // Live payments are deliberately blocked here until the operator, legal review,
@@ -35,7 +36,7 @@ function createSandboxOperation(res, user, params, type) {
   const amount = Math.floor(Number(params.get('amount') || 0));
   if (!Number.isFinite(amount) || amount < 1 || amount > 10000) return redirect(res, '/wallet/rub?error=fields');
   if (type === 'payout' && amount > balance(user.id, 'available')) return redirect(res, '/wallet/rub?error=insufficient');
-  const rate = Number(state.settings.token_exchange_rate || 1);
+  const rate = getTokenMarketStats().referenceRate;
   const item = {
     id: crypto.randomUUID(),
     idempotency_key: crypto.randomUUID(),
@@ -72,6 +73,81 @@ function handleSandboxPayout(res, user, params) {
   return createSandboxOperation(res, user, params, 'payout');
 }
 
+function candlestickSvg(candles) {
+  if (!candles.length) return '<div class="card"><p class="muted">Пока нет записей курса.</p></div>';
+  const width = 760;
+  const height = 260;
+  const padding = 36;
+  const values = candles.flatMap(item => [Number(item.high) || 0, Number(item.low) || 0]);
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (max - min < 0.000001) {
+    const delta = Math.max(Math.abs(max) * 0.05, 0.01);
+    min = Math.max(0, min - delta);
+    max += delta;
+  }
+  const plotHeight = height - padding * 2;
+  const plotWidth = width - padding * 2;
+  const y = value => padding + ((max - value) / (max - min)) * plotHeight;
+  const slot = plotWidth / candles.length;
+  const barWidth = Math.max(4, Math.min(18, slot * 0.55));
+  const shapes = candles.map((item, index) => {
+    const x = padding + slot * (index + 0.5);
+    const open = Number(item.open) || 0;
+    const close = Number(item.close) || 0;
+    const high = Number(item.high) || 0;
+    const low = Number(item.low) || 0;
+    const color = close > open ? '#16866C' : close < open ? '#C76B66' : '#87939E';
+    const top = Math.min(y(open), y(close));
+    const bodyHeight = Math.max(2, Math.abs(y(open) - y(close)));
+    return '<line x1="' + x.toFixed(2) + '" y1="' + y(high).toFixed(2) + '" x2="' + x.toFixed(2) + '" y2="' + y(low).toFixed(2) + '" stroke="' + color + '" stroke-width="1.5"/>' +
+      '<rect x="' + (x - barWidth / 2).toFixed(2) + '" y="' + top.toFixed(2) + '" width="' + barWidth.toFixed(2) + '" height="' + bodyHeight.toFixed(2) + '" rx="1.5" fill="' + color + '"/>';
+  }).join('');
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Свечной график внутреннего курса V-RUB за ScRl" style="display:block;width:100%;height:auto">' +
+    '<line x1="' + padding + '" y1="' + padding + '" x2="' + padding + '" y2="' + (height - padding) + '" stroke="currentColor" opacity=".22"/>' +
+    '<line x1="' + padding + '" y1="' + (height - padding) + '" x2="' + (width - padding) + '" y2="' + (height - padding) + '" stroke="currentColor" opacity=".22"/>' +
+    shapes +
+    '<text x="5" y="' + (padding + 4) + '" fill="currentColor" font-size="10">' + max.toFixed(4) + '</text>' +
+    '<text x="5" y="' + (height - padding) + '" fill="currentColor" font-size="10">' + min.toFixed(4) + '</text>' +
+    '<text x="' + padding + '" y="' + (height - 10) + '" fill="currentColor" font-size="10">' + new Date(candles[0].bucket).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit' }) + '</text>' +
+    '<text x="' + (width - padding) + '" y="' + (height - 10) + '" text-anchor="end" fill="currentColor" font-size="10">' + new Date(candles[candles.length - 1].bucket).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit' }) + '</text>' +
+    '</svg>';
+}
+
+function pageTokenMarket(res, user, url) {
+  if (user.role !== 'admin') return redirect(res, '/');
+  const market = recordTokenRateCandle();
+  const rows = market.candles.slice().reverse().slice(0, 24).map(item =>
+    '<tr><td>' + new Date(item.bucket).toLocaleString('ru-RU') + '</td>' +
+    '<td>' + Number(item.open).toFixed(4) + '</td><td>' + Number(item.high).toFixed(4) + '</td>' +
+    '<td>' + Number(item.low).toFixed(4) + '</td><td>' + Number(item.close).toFixed(4) + '</td>' +
+    '<td>' + Number(item.samples || 0) + '</td></tr>'
+  ).join('');
+  const money = value => Number(value || 0).toLocaleString('ru-RU');
+  sendHtml(res, layout('Курс ScRl', user, flashBox(url) +
+    '<div class="row-between"><div><h1>Курс ScRl</h1><p class="muted">Внутренний расчёт экономики · только V-RUB</p></div><a href="/admin" class="btn btn-ghost btn-sm">← Монитор</a></div>' +
+    '<div class="grid grid-3">' +
+      '<div class="card"><div class="muted small">Текущий курс</div><div style="font-size:25px;font-weight:750">' + market.referenceRate.toFixed(4) + ' V-RUB</div><div class="muted small">за 1 ScRl</div></div>' +
+      '<div class="card"><div class="muted small">V-RUB в кошельках</div><div style="font-size:25px;font-weight:750">' + money(market.virtualRubleSupply) + '</div></div>' +
+      '<div class="card"><div class="muted small">Весь выпуск ScRl</div><div style="font-size:25px;font-weight:750">' + money(market.totalIssuedScRl) + '</div></div>' +
+      '<div class="card"><div class="muted small">В обращении</div><div style="font-size:22px;font-weight:700">' + money(market.circulatingScRl) + ' ScRl</div></div>' +
+      '<div class="card"><div class="muted small">Резерв токенов</div><div style="font-size:22px;font-weight:700">' + money(market.reserveScRl) + ' ScRl</div></div>' +
+      '<div class="card"><div class="muted small">Сожжено</div><div style="font-size:22px;font-weight:700">' + money(market.burnedScRl) + ' ScRl</div></div>' +
+    '</div>' +
+    '<section class="card mt-2"><div class="row-between"><h2>Свечной график курса</h2><span class="muted small">Почасовые наблюдения · до 14 дней</span></div>' +
+      '<p class="muted small">Зелёная свеча — курс вырос за час, красная — снизился, серая — не изменился.</p>' +
+      '<div class="mt-1">' + candlestickSvg(market.candles) + '</div>' +
+    '</section>' +
+    '<section class="card"><h2>Как рассчитывается курс</h2><p><b>Курс = V-RUB в кошельках участников ÷ весь выпуск ScRl.</b></p>' +
+      '<p class="muted small mt-1">В выпуск входят доступные и заблокированные токены участников, системный резерв и сожжённые токены. Сделки проверяют остатки счетов до записи, поэтому нельзя потратить больше имеющегося баланса.</p>' +
+      '<div class="alert alert-info mt-1"><b>Реальное покрытие RUB: 0.</b> Платёжный партнёр и реальные пополнения/выводы не подключены. V-RUB — только внутренняя виртуальная единица; график не показывает банковский курс и не обещает выкуп токенов за деньги.</div>' +
+    '</section>' +
+    '<section class="card"><h2>История свечей</h2>' +
+      (rows ? '<table><thead><tr><th>Час</th><th>Открытие</th><th>Максимум</th><th>Минимум</th><th>Закрытие</th><th>Снимков</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="muted">История пока пуста.</p>') +
+    '</section>'
+  ));
+}
+
 function pageFinancialOps(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
   const rows = state.money_operations.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(o => {
@@ -85,4 +161,4 @@ function pageFinancialOps(res, user, url) {
     '<section class="card"><h2>Журнал</h2>' + (rows ? '<table><thead><tr><th>ID</th><th>Участник</th><th>Тип</th><th>ScRl</th><th>RUB</th><th>Статус</th><th>Режим</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="muted">Операций пока нет.</p>') + '</section>'));
 }
 
-module.exports = { pageRubWallet, handleSandboxTopUp, handleSandboxPayout, pageFinancialOps };
+module.exports = { pageRubWallet, handleSandboxTopUp, handleSandboxPayout, pageFinancialOps, pageTokenMarket };
