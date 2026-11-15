@@ -108,13 +108,15 @@ function createPost(res, user, params, kind) {
   const price = Number(params.get('price') || 0);
   const priceMax = Number(params.get('price_max') || 0);
   const deadline = (params.get('deadline') || '').trim();
+  const deadlineDate = deadline ? new Date(deadline + 'T00:00:00Z') : null;
   if (!title || !description || !category || !Number.isSafeInteger(price) || price < 0 || price > 1000000 ||
       !Number.isSafeInteger(priceMax) || priceMax < 0 || priceMax > 1000000 ||
-      (deadline && !/^\\d{4}-\\d{2}-\\d{2}$/.test(deadline))) {
+      (deadline && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(deadline) ||
+        !Number.isFinite(deadlineDate.getTime()) || deadlineDate.toISOString().slice(0, 10) !== deadline))) {
     return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
   }
   if (mode === 'fixed' && price < 1) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
-  if (mode === 'range' && (price < 1 || priceMax < price)) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
+  if (mode === 'range' && (price < 1 || priceMax < price || priceMax > 1000000)) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
   const moderation = analyseText(title + '\n' + description + '\n' + category);
   const post = {
     id: crypto.randomUUID(), user_id: user.id, title, description, category,
@@ -151,21 +153,45 @@ function handleRespond(res, user, params) {
   const postId = params.get('post_id');
   const kind = params.get('post_kind') === 'offer' ? 'offer' : 'demand';
   const collection = kind === 'demand' ? state.demand_posts : state.offer_posts;
-  const post = collection.find(p => p.id === postId && p.status === 'active');
+  const post = collection.find(item => item.id === postId && item.status === 'active');
   const message = (params.get('message') || '').trim().slice(0, 700);
-  const proposalType = ['paid', 'free', 'barter'].includes(params.get('proposal_type')) ? params.get('proposal_type') : 'paid';
+  const proposalType = ['paid', 'free', 'barter'].includes(params.get('proposal_type'))
+    ? params.get('proposal_type') : 'paid';
   const proposedPrice = Number(params.get('proposed_price') || 0);
-  if (!post || post.user_id === user.id || !message || !Number.isSafeInteger(proposedPrice) || proposedPrice < 0 || proposedPrice > 1000000) return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=bad');
-  if (proposalType === 'paid' && proposedPrice < 1 && post.price_mode !== 'fixed' && post.price_mode !== 'range') {
-    return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=fields');
+
+  if (!post || post.user_id === user.id || !message ||
+      !Number.isSafeInteger(proposedPrice) || proposedPrice < 0 || proposedPrice > 1000000) {
+    return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=bad');
   }
-  if (state.applications.some(a => a.post_id === postId && a.post_kind === kind && a.applicant_id === user.id && a.status === 'pending')) {
-    return redirect(res, '/applications?error=bad');
+  if (proposalType !== 'free') {
+    const owner = state.users.find(item => item.id === post.user_id);
+    if (!canTrade(user) || !owner || !canTrade(owner)) return redirect(res, '/applications?error=age');
   }
+
+  let resolvedPrice = 0;
+  if (proposalType === 'paid') {
+    if (post.price_mode === 'fixed') resolvedPrice = Number(post.price);
+    else if (post.price_mode === 'range') {
+      resolvedPrice = proposedPrice || Number(post.price_min || 0);
+      if (resolvedPrice < Number(post.price_min) || resolvedPrice > Number(post.price_max)) {
+        return redirect(res, '/applications?error=price_range');
+      }
+    } else resolvedPrice = proposedPrice;
+
+    if (!Number.isSafeInteger(resolvedPrice) || resolvedPrice < 1 || resolvedPrice > 1000000) {
+      return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=fields');
+    }
+  }
+
+  if (state.applications.some(item =>
+    item.post_id === postId && item.post_kind === kind &&
+    item.applicant_id === user.id && item.status === 'pending'
+  )) return redirect(res, '/applications?error=bad');
+
   const application = {
     id: crypto.randomUUID(), post_id: post.id, post_kind: kind,
-    owner_id: post.user_id, applicant_id: user.id, proposal_type: proposalType,
-    proposed_price: proposalType === 'paid' ? (proposedPrice || post.price || post.price_min || 0) : 0,
+    owner_id: post.user_id, applicant_id: user.id,
+    proposal_type: proposalType, proposed_price: resolvedPrice,
     message, status: 'pending', created_at: new Date().toISOString()
   };
   state.applications.unshift(application);
@@ -173,6 +199,7 @@ function handleRespond(res, user, params) {
   notify(post.user_id, 'application', 'Новый отклик', 'На вашу публикацию откликнулся ученик.', '/applications');
   return redirect(res, '/applications?msg=sent');
 }
+
 
 function pageApplications(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
@@ -219,7 +246,7 @@ function handleApplicationAction(res, user, params) {
   const price = app.proposal_type === 'paid' ? Number(app.proposed_price) : 0;
   const buyer = state.users.find(item => item.id === buyerId);
   const seller = state.users.find(item => item.id === sellerId);
-  if (!buyer || !seller || (price > 0 && (!canTrade(buyer) || !canTrade(seller)))) {
+  if (!buyer || !seller || (app.proposal_type !== 'free' && (!canTrade(buyer) || !canTrade(seller)))) {
     return redirect(res, '/applications?error=age');
   }
   if (!Number.isSafeInteger(price) || price < 0 || price > 1000000) {
