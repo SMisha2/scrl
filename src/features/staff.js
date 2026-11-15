@@ -26,7 +26,7 @@ function pageTeacher(res, user, url) {
     <div class="card"><h2>Начислить токены</h2>
       <form method="POST" action="/teacher/issue">
         <div class="grid grid-2">
-          <div><label>Ученик</label><select name="user_id" required><option value="">— выберите —</option>${opts}</select></div>
+          <div><label>Ученик</label><select name="user_id" required><option value="">Выберите ученика</option>${opts}</select></div>
           <div><label>Сумма, ScRl</label><input name="amount" type="number" min="1" max="${remaining}" required></div>
         </div>
         <label>Причина</label><select name="reason">

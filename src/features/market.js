@@ -72,7 +72,7 @@ function pageMarket(res, user, url) {
     <h1>Маркетплейс услуг</h1>
     ${form}
     ${mine ? `<div class="card"><h2>Мои объявления</h2>${mine}</div>` : ''}
-    <div class="grid grid-3">${items || '<p class="muted">Пока нет объявлений — станьте первым продавцом.</p>'}</div>`));
+    <div class="grid grid-3">${items || '<p class="muted">Пока нет объявлений. Станьте первым продавцом.</p>'}</div>`));
 }
 
 
@@ -189,7 +189,7 @@ function pageOrders(res, user, url) {
         '<button class="btn btn-ghost btn-sm">Передать модератору</button></form></details>';
     }
     return '<article class="card"><div class="row-between"><div><b>' + esc(listing ? listing.title : 'Заказ Marketplace') + '</b>' +
-      '<div class="muted small">' + (role === 'buyer' ? 'Продавец: ' : 'Покупатель: ') + esc(other ? other.full_name : '—') + '</div></div>' +
+      '<div class="muted small">' + (role === 'buyer' ? 'Продавец: ' : 'Покупатель: ') + esc(other ? other.full_name : 'Не указано') + '</div></div>' +
       '<div style="text-align:right"><div class="accent"><b>🪙 ' + Number(order.price || 0).toLocaleString('ru-RU') + '</b></div>' +
       '<span class="badge ' + statusBadge(order.status) + '">' + statusLabel(order.status) + '</span></div></div>' +
       (order.dispute_reason ? '<p class="small mt-1">Причина спора: ' + esc(order.dispute_reason) + '</p>' : '') +

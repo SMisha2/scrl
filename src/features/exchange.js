@@ -97,7 +97,7 @@ function pageExchange(res, user, url) {
       '<div><div class="muted small">Средняя цена за 7 дней</div><b>' + market.vwapPrice.toFixed(6) + ' V-RUB / ScRl</b></div>' +
       '<div><div class="muted small">Покрытие / комиссия</div><b>' + (market.coverageRatio * 100).toFixed(1) + '% / ' + (market.burnFeeRate * 100).toFixed(2) + '%</b></div></div>' +
       (market.excessScRl > 0 ? '<div class="alert alert-info mt-1">В обращении на ' + market.excessScRl.toLocaleString('ru-RU') + ' ScRl больше обеспеченного лимита. Комиссия повышена, её часть сжигает токены.</div>' : '') +
-      '<p class="muted small mt-1">Соотношение балансов = все V-RUB участников / все ScRl в обращении. Оно меняется при изменении общей массы валют. Цена последней сделки обновляется отдельно после каждого исполненного обмена. V-RUB — виртуальные единицы, не реальные рубли.</p></section>' +
+      '<p class="muted small mt-1">Соотношение балансов = все V-RUB участников / все ScRl в обращении. Оно меняется при изменении общей массы валют. Цена последней сделки обновляется отдельно после каждого исполненного обмена. V-RUB. Виртуальные единицы, не реальные рубли.</p></section>' +
     '<div class="grid grid-2"><section class="card"><div class="muted small">Доступно ScRl</div><div style="font-size:24px;font-weight:700">' +
       balance(user.id, 'available').toLocaleString('ru-RU') + ' ScRl</div></section><section class="card"><div class="muted small">Доступно V-RUB</div><div style="font-size:24px;font-weight:700">' +
       balance(user.id, 'vrub').toLocaleString('ru-RU') + ' V-RUB</div><div class="muted small">Заблокировано: ' +
@@ -229,7 +229,7 @@ function handleExchangeBuy(res, user, params) {
       if (commission > 0) {
         const burn = systemAccount('burn');
         if (!burn) throw new Error('Burn account is not configured');
-        entries.push({ accountId: burn.id, amount: commission, note: 'Динамическая комиссия биржи — сжигание ScRl' });
+        entries.push({ accountId: burn.id, amount: commission, note: 'Динамическая комиссия биржи: сжигание ScRl' });
       }
       recordTx('exchange_trade_vrub', user.id,
         { orderId: order.id, side, amount, price, cost, costCurrency: 'ScRl', commission, commissionRate: marketBefore.burnFeeRate },
@@ -254,7 +254,7 @@ function handleExchangeBuy(res, user, params) {
       if (commission > 0) {
         const burn = systemAccount('burn');
         if (!burn) throw new Error('Burn account is not configured');
-        entries.push({ accountId: burn.id, amount: commission, note: 'Динамическая комиссия биржи — сжигание ScRl' });
+        entries.push({ accountId: burn.id, amount: commission, note: 'Динамическая комиссия биржи: сжигание ScRl' });
       }
       recordTx('exchange_trade', user.id,
         { orderId: order.id, side, amount, price, cost, costCurrency: 'V-RUB', commission, commissionRate: marketBefore.burnFeeRate },

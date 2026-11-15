@@ -109,15 +109,15 @@ function pageModeration(res, user, url) {
       buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl заказчику' : 'Отменить сделку') + '</button></form>' +
         '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="release_seller"><button class="btn btn-primary btn-sm">' + (paid ? 'Завершить в пользу исполнителя' : 'Завершить сделку') + '</button></form>';
     } else {
-      buttons = '<span class="badge badge-muted">Объект уже изменён — проверьте журнал</span>';
+      buttons = '<span class="badge badge-muted">Объект уже изменён. Проверьте журнал</span>';
     }
     const title = post?.title || listing?.title || orderListing?.title || (deal ? 'Спор по сделке' : order ? 'Спор по заказу Marketplace' : 'Объект не найден');
     const body = post?.description || listing?.description || deal?.dispute_reason || order?.dispute_reason || item.reason || 'Нет подробностей';
     return '<article class="card"><div class="row-between"><div><span class="badge badge-accent">' + esc(item.kind) + '</span> <span class="badge badge-muted">' + esc(post?.moderation_level || listing?.moderation_level || 'ручная проверка') + '</span></div><span class="muted small">' + esc(item.created_at || '') + '</span></div>' +
       '<h2 class="mt-1">' + esc(title) + '</h2>' +
       (author ? '<p class="muted small">Автор: ' + esc(author.full_name) + '</p>' : '') +
-      (deal ? '<p class="muted small">Заказчик: ' + esc(buyer?.full_name || '—') + ' · Исполнитель: ' + esc(seller?.full_name || '—') + ' · Цена: ' + Number(deal.price || 0).toLocaleString('ru-RU') + ' ScRl · Escrow: ' + balance(deal.buyer_id, 'held').toLocaleString('ru-RU') + ' ScRl</p>' : '') +
-      (order ? '<p class="muted small">Покупатель: ' + esc(buyer?.full_name || '—') + ' · Продавец: ' + esc(seller?.full_name || '—') + ' · Цена: ' + Number(order.price || 0).toLocaleString('ru-RU') + ' ScRl · Резерв по заказу: ' + orderLedgerState(order).escrow.toLocaleString('ru-RU') + ' ScRl</p>' : '') +
+      (deal ? '<p class="muted small">Заказчик: ' + esc(buyer?.full_name || 'Не указано') + ' · Исполнитель: ' + esc(seller?.full_name || 'Не указано') + ' · Цена: ' + Number(deal.price || 0).toLocaleString('ru-RU') + ' ScRl · Escrow: ' + balance(deal.buyer_id, 'held').toLocaleString('ru-RU') + ' ScRl</p>' : '') +
+      (order ? '<p class="muted small">Покупатель: ' + esc(buyer?.full_name || 'Не указано') + ' · Продавец: ' + esc(seller?.full_name || 'Не указано') + ' · Цена: ' + Number(order.price || 0).toLocaleString('ru-RU') + ' ScRl · Резерв по заказу: ' + orderLedgerState(order).escrow.toLocaleString('ru-RU') + ' ScRl</p>' : '') +
       '<p class="mt-1">' + esc(body) + '</p><p class="muted small mt-1">Основание: ' + esc(item.reason || 'Ручная проверка') + '</p>' +
       (Array.isArray(post?.moderation_findings || listing?.moderation_findings) && (post?.moderation_findings || listing?.moderation_findings).length ? '<p class="small">Совпадения: ' + esc((post?.moderation_findings || listing?.moderation_findings).map(x => x.label).join('; ')) + '</p>' : '') +
       (item.recommendation ? '<p class="small muted">' + esc(item.recommendation) + '</p>' : '') +
@@ -144,7 +144,7 @@ function pageModeration(res, user, url) {
       '<form method="POST" action="/admin/moderation/report"><input type="hidden" name="report_id" value="' + esc(report.id) + '"><input type="hidden" name="decision" value="remove"><button class="btn btn-danger btn-sm">Скрыть публикацию</button></form>';
     return '<article class="card"><div class="row-between"><b>' + esc(title) + '</b><span class="badge badge-accent">Жалоба · ' + esc(meta.targetType || 'объект') + '</span></div>' +
       (description ? '<p class="mt-1">' + esc(description) + '</p>' : '') +
-      '<p class="muted small mt-1">Автор: ' + esc(author?.full_name || '—') + ' · Жалобу отправил: ' + esc(reporter?.full_name || 'участник') + '</p>' +
+      '<p class="muted small mt-1">Автор: ' + esc(author?.full_name || 'Не указано') + ' · Жалобу отправил: ' + esc(reporter?.full_name || 'участник') + '</p>' +
       '<p class="small">Причина: ' + esc(report.reason || 'Не указана') + '</p><div class="row mt-2">' + buttons + '</div></article>';
   }).join('');
 
@@ -157,15 +157,15 @@ function pageModeration(res, user, url) {
     String(b.created_at || '').localeCompare(String(a.created_at || ''))
   ).slice(0, 20).map(entry => {
     const actor = state.users.find(person => person.id === entry.actor_id);
-    return '<tr><td class="muted small">' + esc(entry.created_at || '—') + '</td>' +
+    return '<tr><td class="muted small">' + esc(entry.created_at || 'Не указано') + '</td>' +
       '<td>' + esc(actor?.full_name || 'Система') + '</td>' +
-      '<td>' + esc(entry.action || '—') + '</td>' +
-      '<td class="small">' + esc(entry.target_id || '—') + '</td>' +
-      '<td class="small">' + esc(entry.reason || '—') + '</td></tr>';
+      '<td>' + esc(entry.action || 'Не указано') + '</td>' +
+      '<td class="small">' + esc(entry.target_id || 'Не указано') + '</td>' +
+      '<td class="small">' + esc(entry.reason || 'Не указано') + '</td></tr>';
   }).join('');
   sendHtml(res, layout('Модерация', user, flashBox(url) +
-    '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted">Автофильтр — это сигнал, а не доказательство нарушения. Решения остаются за администратором.</p>' +
-    (getApiConfig() ? '<p class="small"><span class="badge badge-accent">Расширенная проверка подключена</span></p>' : '<p class="small muted">Расширенная проверка не настроена — работают локальные правила.</p>') +
+    '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted">Автофильтр показывает возможный риск, но не доказывает нарушение. Решения остаются за администратором.</p>' +
+    (getApiConfig() ? '<p class="small"><span class="badge badge-accent">Расширенная проверка подключена</span></p>' : '<p class="small muted">Расширенная проверка не настроена. Работают локальные правила.</p>') +
     '</div><div class="row"><form method="POST" action="/admin/moderation/scan"><button class="btn btn-ghost">Повторно проверить публикации</button></form><a class="btn btn-primary" href="/admin/ai">Помощник</a></div></div>' +
     metrics + search + '<h2 class="mt-2">Проверки и споры (' + cases.length + ')</h2>' +
     (caseHtml || '<div class="card"><p class="muted">Открытых проверок нет.</p></div>') +
@@ -488,8 +488,8 @@ function answerAdminQuestion(question) {
       .filter(x => x.result.requiresReview).slice(0, 12);
     return 'Результат текстового скрининга:\n• Публикаций всего: ' + posts.length + '\n• На ручной проверке: ' + flagged +
       '\n• Найдено совпадений при повторной проверке: ' + matches.length + '\n' +
-      (matches.map(x => '• «' + x.post.title + '» — ' + x.result.findings.map(f => f.label).join(', ')).join('\n') || 'Совпадений не найдено.') +
-      '\n\nСовпадение — не доказательство нарушения.';
+      (matches.map(x => '• «' + x.post.title + '»: ' + x.result.findings.map(f => f.label).join(', ')).join('\n') || 'Совпадений не найдено.') +
+      '\n\nСамо совпадение не доказывает нарушение.';
   }
   if (q.includes('аукцион')) return 'Активных внутренних аукционов ScRl: ' + activeAuctions + '. Денежные ставки и денежные призы не используются.';
   if (q.includes('эконом') || q.includes('баланс') || q.includes('токен')) {
@@ -507,7 +507,7 @@ function pageAiChat(res, user, url) {
     new Date(x.created_at).toLocaleString('ru-RU') + '</span></div>').join('');
   sendHtml(res, layout('AI Moderator', user,
     '<div class="row-between"><div><h1>AI Moderator</h1><p class="muted">Локальная аналитика и проверка по правилам, без внешнего AI-провайдера.</p></div><a class="btn btn-ghost btn-sm" href="/admin/moderation">К модерации</a></div>' +
-    '<div class="alert alert-info">Помощник не банит пользователей и не принимает финансовые решения. Его выводы — рекомендации для человека.</div>' +
+    '<div class="alert alert-info">Помощник не банит пользователей и не принимает финансовые решения. Его выводы являются рекомендациями для человека.</div>' +
     (transcript || '<div class="card"><p class="muted">Попробуйте: «Сколько открытых жалоб?», «Покажи публикации с рисками», «Сводка экономики».</p></div>') +
     '<form class="card" method="POST" action="/admin/ai/chat"><label>Сообщение помощнику</label><textarea name="message" rows="3" maxlength="1000" required></textarea><button class="btn btn-primary">Отправить</button></form>'));
 }
