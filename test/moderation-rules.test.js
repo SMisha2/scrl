@@ -16,6 +16,7 @@ test('recognizes spaced and visually obfuscated Russian text', () => {
 
 test('recognizes personal and payment data patterns', () => {
   assert.ok(analyseText('Напиши CVV карты и пароль от почты').findings.some(x => x.code === 'personal_data'));
+  assert.ok(analyseText('Номер телефона: +7 999 123-45-67').findings.some(x => x.code === 'personal_data'));
   assert.ok(analyseText('Номер телефона +7 999 123-45-67').findings.some(x => x.code === 'personal_data'));
 });
 
