@@ -4,7 +4,7 @@ const { canTrade } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
-const { analyseText } = require('../services/moderation-rules');
+const { analyseSubmission } = require('../services/ai-moderation');
 const { notify } = require('../utils/notifications');
 function orderEscrow(orderId, buyerId) {
   const held = state.accounts.find(item => item.user_id === buyerId && item.kind === 'held');
@@ -76,7 +76,7 @@ function pageMarket(res, user, url) {
 }
 
 
-function handleCreateListing(res, user, params) {
+async function handleCreateListing(res, user, params) {
   if (user.role !== 'student' || !canTrade(user)) return redirect(res, '/market?error=age');
   const title = (params.get('title') || '').trim().slice(0, 80);
   const category = (params.get('category') || 'Другое').trim().slice(0, 40);
@@ -85,7 +85,7 @@ function handleCreateListing(res, user, params) {
   if (!title || !description || !category || !Number.isSafeInteger(price) || price < 1 || price > 1000000) {
     return redirect(res, '/market?error=fields');
   }
-  const moderation = analyseText(title + '\n' + description + '\n' + category);
+  const moderation = await analyseSubmission(title + '\n' + description + '\n' + category);
   const listing = {
     id: crypto.randomUUID(), seller_id: user.id, title, category, description, price,
     status: moderation.requiresReview ? 'pending' : 'active',
