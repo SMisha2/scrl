@@ -16,6 +16,8 @@ test('legacy SHA-256 hashes remain verifiable for gradual migration', () => {
   assert.equal(verifyPassword('wrong', legacy), false);
 });
 
-test('new hashes reject too-short passwords', () => {
-  assert.throws(() => hashPassword('short'), /8 and 1024/);
+test('new hashes reject passwords shorter than the original six-character minimum', () => {
+  assert.throws(() => hashPassword('short'), /6 and 1024/);
+  const oldMinimum = hashPassword('123456');
+  assert.equal(verifyPassword('123456', oldMinimum), true);
 });
