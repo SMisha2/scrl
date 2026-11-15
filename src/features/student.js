@@ -91,7 +91,7 @@ function pageApp(res, user, url) {
     '<section class="home-rate"><div class="row-between"><div><span class="muted small">Курс ScRl</span>' +
       '<div><strong>1 ScRl = ' + Number(market.referenceRate || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) +
       ' V-RUB</strong></div></div><a class="small" href="/exchange">Биржа →</a></div>' +
-      '<p class="muted small" style="margin-top:5px">V-RUB — внутренняя единица ScRl, не реальные деньги.</p></section>';
+      '<p class="muted small" style="margin-top:5px">V-RUB. Внутренняя единица ScRl, не реальные деньги.</p></section>';
 
   sendHtml(res, layout('Главная', user, content));
 }
