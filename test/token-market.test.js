@@ -136,6 +136,50 @@ test('executed trades move the market price using seven-day volume-weighted pric
   assert.equal(saves.length, 2);
 });
 
+
+test('signup bonus preserves the original 5 V-RUB value at the current live ratio', () => {
+  const state = createState();
+  state.accounts.find(account => account.kind === 'vrub').balance = 5000;
+  const { market } = loadMarketWithState(state);
+  const rateAtRegistration = market.getTokenMarketStats().referenceRate;
+  assert.equal(rateAtRegistration, 0.05);
+
+  // Registration then adds the standard 1,000 V-RUB starter balance.
+  state.users.push({ id: 'new-student', role: 'student' });
+  state.accounts.push(
+    { id: 'new-available', user_id: 'new-student', kind: 'available', balance: 0 },
+    { id: 'new-held', user_id: 'new-student', kind: 'held', balance: 0 },
+    { id: 'new-vrub', user_id: 'new-student', kind: 'vrub', balance: 1000 },
+    { id: 'new-vrub-held', user_id: 'new-student', kind: 'vrub_held', balance: 0 }
+  );
+  assert.equal(market.calculateSignupBonusScRl(rateAtRegistration), 100);
+});
+
+test('signup bonus scales down at 1 ScRl = 1,000 V-RUB instead of always issuing 100', () => {
+  const state = createState();
+  state.accounts.find(account => account.kind === 'available').balance = 100;
+  state.accounts.find(account => account.kind === 'held').balance = 0;
+  state.accounts.find(account => account.kind === 'vrub').balance = 100000;
+  state.accounts.find(account => account.kind === 'vrub_held').balance = 0;
+  const { market } = loadMarketWithState(state);
+  const rateAtRegistration = market.getTokenMarketStats().referenceRate;
+  assert.equal(rateAtRegistration, 1000);
+  assert.equal(market.calculateSignupBonusScRl(rateAtRegistration), 0);
+});
+
+test('signup bonus is capped by the remaining backed supply capacity', () => {
+  const state = createState();
+  state.accounts.find(account => account.kind === 'available').balance = 79900;
+  state.accounts.find(account => account.kind === 'held').balance = 0;
+  state.accounts.find(account => account.kind === 'vrub').balance = 4000;
+  state.accounts.find(account => account.kind === 'vrub_held').balance = 0;
+  const { market } = loadMarketWithState(state);
+  // Existing ratio is 0.05; only 100 ScRl of backed issuance capacity remain.
+  const rateAtRegistration = market.getTokenMarketStats().referenceRate;
+  assert.equal(rateAtRegistration, 4000 / 79900);
+  assert.equal(market.calculateSignupBonusScRl(rateAtRegistration), 100);
+});
+
 test('an order cannot create two market trades', () => {
   const state = createState();
   const { market } = loadMarketWithState(state);
