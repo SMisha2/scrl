@@ -147,7 +147,7 @@ async function createPost(res, user, params, kind) {
 }
 
 async function handleCreateDemand(res, user, params) { return createPost(res, user, params, 'demand'); }
-async function handleCreateOffer(res, user, params) { return createPost(res, user, params, 'offer');
+async function handleCreateOffer(res, user, params) { return createPost(res, user, params, 'offer'); }
 
 function handleRespond(res, user, params) {
   if (user.role !== 'student') return redirect(res, '/');
