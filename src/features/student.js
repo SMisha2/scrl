@@ -70,7 +70,7 @@ function pageApp(res, user, url) {
       '<div class="home-balance home-balance-secondary"><small>V-RUB</small><strong>' +
         vrub.toLocaleString('ru-RU') + ' V-RUB</strong></div>' +
     '</section>' +
-    (!tradeable ? '<p class="muted small" style="margin-bottom:18px">Платные сделки и аукционы доступны с 14 лет. Бесплатная помощь доступна всем участникам.</p>' : '') +
+    (!tradeable ? '<p class="muted small" style="margin-bottom:18px">Платные сделки доступны с 14 лет.</p>' : '') +
     '<nav class="home-actions" aria-label="Основные действия">' +
       '<a class="btn btn-primary" href="/board">Доска помощи</a>' +
       '<a href="/activity">Мои дела</a>' +
