@@ -58,7 +58,7 @@ function pageBoard(res, user, url, kind) {
     const responses = state.applications.filter(a => a.post_id === post.id && a.post_kind === kind).length;
     const favorite = state.favorites.some(f => f.user_id === user.id && f.post_id === post.id && f.post_kind === kind);
     const moderation = post.status === 'pending' ? '<span class="badge badge-accent">На проверке</span>' : '';
-    const responseForm = mine ? '<a class="btn btn-ghost btn-sm" href="/applications">Отклики (' + responses + ')</a>' :
+    const responseForm = mine ? '<a class="btn btn-ghost btn-sm" href="/activity">Отклики (' + responses + ')</a>' :
       '<form method="POST" action="/posts/respond" class="mt-1">' +
       '<input type="hidden" name="post_id" value="' + esc(post.id) + '">' +
       '<input type="hidden" name="post_kind" value="' + kind + '">' +
@@ -90,10 +90,87 @@ function pageBoard(res, user, url, kind) {
     '<label>Желаемый срок (необязательно)</label><input name="deadline" type="date">' +
     '<button class="btn btn-primary" type="submit">Опубликовать</button></form></section>';
   sendHtml(res, layout(heading, user,
-    flashBox(url) + '<div class="row-between"><div><h1>' + heading + '</h1><p class="muted">ScRl · Сообщество навыков и взаимопомощи</p></div><a class="btn btn-ghost btn-sm" href="/applications">Мои отклики</a></div>' +
+    flashBox(url) + '<div class="row-between"><div><h1>' + heading + '</h1><p class="muted">ScRl · Сообщество навыков и взаимопомощи</p></div><a class="btn btn-ghost btn-sm" href="/activity">Мои отклики</a></div>' +
     form + '<section class="card"><form method="GET" action="' + (isDemand ? '/demand' : '/offers') + '" class="grid grid-2"><div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div><div><label>Категория</label><select name="category"><option value="">Все категории</option>' + categories.map(c => '<option ' + (category === c ? 'selected' : '') + ' value="' + esc(c) + '">' + esc(c) + '</option>').join('') + '</select></div><button class="btn btn-ghost btn-sm">Применить фильтры</button></form></section>' +
     (cards || '<div class="card text-center"><h2>Пока нет публикаций</h2><p class="muted">Создайте первую публикацию или измените параметры поиска.</p></div>')
   ));
+}
+
+function pageCommunity(res, user, url) {
+  if (user.role !== 'student') return redirect(res, '/');
+  const q = (url.searchParams.get('q') || '').trim().toLowerCase();
+  const category = url.searchParams.get('category') || '';
+  const kindFilter = ['demand', 'offer'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'all';
+  const allPosts = [
+    ...state.demand_posts.map(post => ({ ...post, post_kind: 'demand' })),
+    ...state.offer_posts.map(post => ({ ...post, post_kind: 'offer' }))
+  ];
+  const categories = Array.from(new Set(allPosts.map(post => post.category).filter(Boolean))).sort();
+  const posts = allPosts.filter(post => {
+    const owner = state.users.find(person => person.id === post.user_id);
+    return ['active', 'pending'].includes(post.status) &&
+      (post.status === 'active' || post.user_id === user.id) &&
+      (post.user_id === user.id || !owner?.is_blocked) &&
+      (kindFilter === 'all' || post.post_kind === kindFilter) &&
+      (!q || (post.title + ' ' + post.description).toLowerCase().includes(q)) &&
+      (!category || post.category === category);
+  }).sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  const cards = posts.map(post => {
+    const author = state.users.find(person => person.id === post.user_id);
+    const mine = post.user_id === user.id;
+    const responses = state.applications.filter(app => app.post_id === post.id && app.post_kind === post.post_kind).length;
+    const favorite = state.favorites.some(item => item.user_id === user.id && item.post_id === post.id && item.post_kind === post.post_kind);
+    const kindLabel = post.post_kind === 'demand' ? 'Ищу помощь' : 'Предлагаю помощь';
+    const moderation = post.status === 'pending' ? '<span class="badge badge-accent">На проверке</span>' : '';
+    const responseForm = mine
+      ? '<a class="btn btn-ghost btn-sm" href="/activity">Отклики (' + responses + ')</a>'
+      : '<form method="POST" action="/posts/respond" class="mt-1">' +
+        '<input type="hidden" name="post_id" value="' + esc(post.id) + '">' +
+        '<input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
+        '<label>Ваш отклик</label><textarea name="message" rows="2" maxlength="700" required placeholder="Коротко опишите, чем можете помочь"></textarea>' +
+        '<div class="grid grid-2"><div><label>Формат</label><select name="proposal_type"><option value="paid">За ScRl</option><option value="free">Бесплатно</option><option value="barter">Обмен</option></select></div>' +
+        '<div><label>Цена, ScRl</label><input name="proposed_price" type="number" min="1" placeholder="Цена"></div></div>' +
+        '<button class="btn btn-primary btn-sm" type="submit">Отправить отклик</button></form>';
+    const reportForm = !mine
+      ? '<details class="mt-1"><summary class="small muted" style="cursor:pointer">Пожаловаться</summary><form method="POST" action="/posts/report" class="mt-1">' +
+        '<input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
+        '<label>Причина</label><select name="reason_code"><option value="unsafe">Опасная услуга или товар</option><option value="privacy">Личные данные</option><option value="harassment">Оскорбления или угрозы</option><option value="spam">Спам или обман</option><option value="other">Другое</option></select>' +
+        '<textarea name="details" maxlength="300" rows="2" placeholder="Дополнительные детали"></textarea><button class="btn btn-ghost btn-sm">Отправить жалобу</button></form></details>'
+      : '';
+    return '<article class="card">' +
+      '<div class="row-between"><div class="row"><span class="badge badge-primary-soft">' + kindLabel + '</span><span class="badge badge-muted">' + esc(post.category || 'Другое') + '</span>' + moderation + '</div><span class="muted small">' + new Date(post.created_at).toLocaleDateString('ru-RU') + '</span></div>' +
+      '<h2 class="mt-1">' + esc(post.title) + '</h2><p>' + esc(post.description).replace(/\n/g, '<br>') + '</p>' +
+      '<div class="row-between mt-1"><b class="accent">' + esc(moneyLabel(post)) + '</b><span class="muted small">' + esc(author ? author.full_name : 'Участник') + (author && author.class_name ? ' · ' + esc(author.class_name) : '') + '</span></div>' +
+      (post.deadline ? '<p class="muted small mt-1">Срок: ' + esc(post.deadline) + '</p>' : '') +
+      '<div class="row mt-2">' + responseForm +
+      '<form method="POST" action="/favorites/toggle"><input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '"><button class="btn btn-ghost btn-sm">' + (favorite ? '★ В избранном' : '☆ В избранное') + '</button></form>' +
+      reportForm + '</div></article>';
+  }).join('');
+
+  const priceOptions = Object.keys(PRICE_MODES).map(key => '<option value="' + key + '">' + PRICE_MODES[key] + '</option>').join('');
+  const form = '<section class="card"><div class="row-between"><div><h2>Новая публикация</h2><p class="muted small">Опишите, что вам нужно или чем вы можете помочь.</p></div><span class="badge badge-primary-soft">Бесплатно или за ScRl</span></div>' +
+    '<form method="POST" action="/board/create" class="mt-1"><input type="hidden" name="return_to" value="board">' +
+    '<div class="grid grid-2"><div><label>Тип публикации</label><select name="post_kind"><option value="demand">Мне нужна помощь</option><option value="offer">Я могу помочь</option></select></div>' +
+    '<div><label>Категория</label><input name="category" maxlength="40" required list="board-categories" placeholder="Например, программирование"><datalist id="board-categories">' + categories.map(value => '<option value="' + esc(value) + '">').join('') + '<option value="Учёба"><option value="Дизайн"><option value="Разработка"><option value="Творчество"><option value="Помощь"></datalist></div></div>' +
+    '<label>Название</label><input name="title" maxlength="100" required placeholder="Кратко сформулируйте запрос или предложение">' +
+    '<label>Описание</label><textarea name="description" rows="3" maxlength="1500" required placeholder="Добавьте подробности"></textarea>' +
+    '<div class="grid grid-2"><div><label>Условия</label><select name="price_mode">' + priceOptions + '</select></div><div><label>Цена / от, ScRl</label><input name="price" type="number" min="0" value="0"></div></div>' +
+    '<div class="grid grid-2"><div><label>До, ScRl (для диапазона)</label><input name="price_max" type="number" min="0" value="0"></div><div><label>Желаемый срок</label><input name="deadline" type="date"></div></div>' +
+    '<button class="btn btn-primary" type="submit">Опубликовать</button></form></section>';
+  const filters = '<section class="card"><form method="GET" action="/board"><div class="grid grid-3">' +
+    '<div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div>' +
+    '<div><label>Показывать</label><select name="kind"><option value="all"' + (kindFilter === 'all' ? ' selected' : '') + '>Всё вместе</option><option value="demand"' + (kindFilter === 'demand' ? ' selected' : '') + '>Мне нужно</option><option value="offer"' + (kindFilter === 'offer' ? ' selected' : '') + '>Я могу</option></select></div>' +
+    '<div><label>Категория</label><select name="category"><option value="">Все категории</option>' + categories.map(value => '<option value="' + esc(value) + '"' + (category === value ? ' selected' : '') + '>' + esc(value) + '</option>').join('') + '</select></div></div><button class="btn btn-ghost btn-sm mt-1" type="submit">Применить</button> <a class="btn btn-ghost btn-sm" href="/board">Сбросить</a></form></section>';
+  sendHtml(res, layout('Общая доска', user,
+    flashBox(url) + '<div class="row-between"><div><h1>Общая доска</h1><p class="muted">Все запросы и предложения в одной ленте.</p></div><span class="badge badge-muted">' + posts.length + ' публикаций</span></div>' +
+    form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>')
+  ));
+}
+
+function handleCreateBoard(res, user, params) {
+  const kind = params.get('post_kind') === 'offer' ? 'offer' : 'demand';
+  return createPost(res, user, params, kind);
 }
 
 function pageDemand(res, user, url) { return pageBoard(res, user, url, 'demand'); }
@@ -102,6 +179,7 @@ function pageOffers(res, user, url) { return pageBoard(res, user, url, 'offer');
 async function createPost(res, user, params, kind) {
   if (user.role !== 'student') return redirect(res, '/');
   const isDemand = kind === 'demand';
+  const returnPath = params.get('return_to') === 'board' ? '/board' : (isDemand ? '/demand' : '/offers');
   const title = (params.get('title') || '').trim().slice(0, 100);
   const description = (params.get('description') || '').trim().slice(0, 1500);
   const category = (params.get('category') || 'Другое').trim().slice(0, 40);
@@ -114,10 +192,10 @@ async function createPost(res, user, params, kind) {
       !Number.isSafeInteger(priceMax) || priceMax < 0 || priceMax > 1000000 ||
       (deadline && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(deadline) ||
         !Number.isFinite(deadlineDate.getTime()) || deadlineDate.toISOString().slice(0, 10) !== deadline))) {
-    return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
+    return redirect(res, returnPath + '?error=fields');
   }
-  if (mode === 'fixed' && price < 1) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
-  if (mode === 'range' && (price < 1 || priceMax < price || priceMax > 1000000)) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
+  if (mode === 'fixed' && price < 1) return redirect(res, returnPath + '?error=fields');
+  if (mode === 'range' && (price < 1 || priceMax < price || priceMax > 1000000)) return redirect(res, returnPath + '?error=fields');
   const moderation = await analyseSubmission(title + '\n' + description + '\n' + category);
   const post = {
     id: crypto.randomUUID(), user_id: user.id, title, description, category,
@@ -141,9 +219,9 @@ async function createPost(res, user, params, kind) {
     state.users.filter(admin => admin.role === 'admin').forEach(admin =>
       notify(admin.id, 'moderation', 'Новая публикация на проверке', 'Требуется проверка публикации «' + post.title + '».', '/admin/moderation')
     );
-    return redirect(res, (isDemand ? '/demand' : '/offers') + '?msg=pending_review');
+    return redirect(res, returnPath + '?msg=pending_review');
   }
-  return redirect(res, (isDemand ? '/demand' : '/offers') + '?msg=created');
+  return redirect(res, returnPath + '?msg=created');
 }
 
 async function handleCreateDemand(res, user, params) { return createPost(res, user, params, 'demand'); }
@@ -198,29 +276,46 @@ function handleRespond(res, user, params) {
   };
   state.applications.unshift(application);
   save();
-  notify(post.user_id, 'application', 'Новый отклик', 'На вашу публикацию откликнулся ученик.', '/applications');
+  notify(post.user_id, 'application', 'Новый отклик', 'На вашу публикацию откликнулся ученик.', '/activity');
   return redirect(res, '/applications?msg=sent');
 }
 
 
 function pageApplications(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
-  const incoming = state.applications.filter(a => a.owner_id === user.id);
-  const outgoing = state.applications.filter(a => a.applicant_id === user.id);
-  const card = (a, received) => {
-    const applicant = state.users.find(u => u.id === a.applicant_id);
-    const post = (a.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(p => p.id === a.post_id);
-    const canAct = received && a.status === 'pending' && post && post.status === 'active';
-    return '<article class="card"><div class="row-between"><b>' + esc(post ? post.title : 'Публикация удалена') + '</b><span class="badge badge-muted">' + esc(a.status) + '</span></div>' +
-      '<p class="muted small">' + (received ? 'Отклик от ' + esc(applicant ? applicant.full_name : 'пользователь') : 'Ваш отклик') + ' · ' + new Date(a.created_at).toLocaleString('ru-RU') + '</p>' +
-      '<p class="mt-1">' + esc(a.message) + '</p><p class="mt-1"><b>' + (a.proposal_type === 'paid' ? a.proposed_price + ' ScRl' : a.proposal_type === 'free' ? 'Бесплатно' : 'Обмен') + '</b></p>' +
-      (canAct ? '<div class="row mt-2"><form method="POST" action="/applications/action"><input type="hidden" name="application_id" value="' + esc(a.id) + '"><input type="hidden" name="decision" value="accept"><button class="btn btn-primary btn-sm">Принять и создать сделку</button></form><form method="POST" action="/applications/action"><input type="hidden" name="application_id" value="' + esc(a.id) + '"><input type="hidden" name="decision" value="decline"><button class="btn btn-ghost btn-sm">Отклонить</button></form></div>' : '') +
-      (a.deal_id ? '<a class="btn btn-ghost btn-sm mt-1" href="/deal?id=' + encodeURIComponent(a.deal_id) + '">Открыть сделку</a>' : '') + '</article>';
+  const incoming = state.applications.filter(app => app.owner_id === user.id);
+  const outgoing = state.applications.filter(app => app.applicant_id === user.id);
+  const card = (app, received) => {
+    const applicant = state.users.find(person => person.id === app.applicant_id);
+    const post = (app.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(item => item.id === app.post_id);
+    const canAct = received && app.status === 'pending' && post && post.status === 'active';
+    return '<article class="card"><div class="row-between"><b>' + esc(post ? post.title : 'Публикация удалена') + '</b><span class="badge badge-muted">' + esc(app.status) + '</span></div>' +
+      '<p class="muted small">' + (received ? 'Отклик от ' + esc(applicant ? applicant.full_name : 'участника') : 'Ваш отклик') + ' · ' + new Date(app.created_at).toLocaleString('ru-RU') + '</p>' +
+      '<p class="mt-1">' + esc(app.message) + '</p><p class="mt-1"><b>' + (app.proposal_type === 'paid' ? app.proposed_price + ' ScRl' : app.proposal_type === 'free' ? 'Бесплатно' : 'Обмен') + '</b></p>' +
+      (canAct ? '<div class="row mt-2"><form method="POST" action="/applications/action"><input type="hidden" name="application_id" value="' + esc(app.id) + '"><input type="hidden" name="decision" value="accept"><button class="btn btn-primary btn-sm">Принять и создать сделку</button></form><form method="POST" action="/applications/action"><input type="hidden" name="application_id" value="' + esc(app.id) + '"><input type="hidden" name="decision" value="decline"><button class="btn btn-ghost btn-sm">Отклонить</button></form></div>' : '') +
+      (app.deal_id ? '<a class="btn btn-ghost btn-sm mt-1" href="/deal?id=' + encodeURIComponent(app.deal_id) + '">Открыть сделку</a>' : '') + '</article>';
   };
-  sendHtml(res, layout('Отклики', user, flashBox(url) + '<h1>Отклики</h1><div class="grid grid-2"><section><h2>Полученные (' + incoming.length + ')</h2>' +
-    (incoming.map(a => card(a, true)).join('') || '<p class="muted">Пока никто не откликнулся.</p>') + '</section><section><h2>Отправленные (' + outgoing.length + ')</h2>' +
-    (outgoing.map(a => card(a, false)).join('') || '<p class="muted">Вы ещё не отправляли отклики.</p>') + '</section></div>'));
+  const deals = state.deals.filter(deal => deal.buyer_id === user.id || deal.seller_id === user.id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const dealCards = deals.map(deal => {
+    const post = (deal.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(item => item.id === deal.post_id);
+    const other = state.users.find(person => person.id === (deal.buyer_id === user.id ? deal.seller_id : deal.buyer_id));
+    const price = deal.price ? deal.price + ' ScRl' : deal.deal_type === 'barter' ? 'Обмен' : 'Бесплатно';
+    return '<a class="card activity-deal" style="display:block;color:inherit" href="/deal?id=' + encodeURIComponent(deal.id) + '">' +
+      '<div class="row-between"><b>' + esc(post ? post.title : 'Сделка ScRl') + '</b><span class="badge badge-muted">' + esc(deal.status) + '</span></div>' +
+      '<p class="muted small mt-1">' + (deal.buyer_id === user.id ? 'Исполнитель: ' : 'Заказчик: ') + esc(other ? other.full_name : 'Участник') + '</p>' +
+      '<div class="row-between mt-1"><b>' + price + '</b><span class="small">Открыть →</span></div></a>';
+  }).join('');
+  sendHtml(res, layout('Активность', user,
+    flashBox(url) + '<div class="row-between"><div><h1>Активность</h1><p class="muted">Отклики и сделки в одном разделе.</p></div><a class="btn btn-ghost btn-sm" href="/board">На доску</a></div>' +
+    '<div class="grid grid-2"><section><h2>Входящие отклики <span class="muted small">(' + incoming.length + ')</span></h2>' +
+    (incoming.map(app => card(app, true)).join('') || '<p class="muted">Пока нет входящих откликов.</p>') + '</section><section><h2>Мои отклики <span class="muted small">(' + outgoing.length + ')</span></h2>' +
+    (outgoing.map(app => card(app, false)).join('') || '<p class="muted">Вы ещё не отправляли отклики.</p>') + '</section></div>' +
+    '<section class="mt-2" id="deals"><div class="row-between"><div><h2>Мои сделки <span class="muted small">(' + deals.length + ')</span></h2><p class="muted small">Переписка, выполнение и статусы.</p></div><a class="small" href="/deals">Все сделки →</a></div>' +
+    (dealCards || '<div class="card"><p class="muted">Активных сделок пока нет. Откликнитесь на публикацию на общей доске.</p><a class="btn btn-primary btn-sm mt-1" href="/board">Открыть доску</a></div>') + '</section>'
+  ));
 }
+
 
 function handleApplicationAction(res, user, params) {
   if (user.role !== 'student') return redirect(res, '/');
@@ -231,7 +326,7 @@ function handleApplicationAction(res, user, params) {
     app.status = 'declined';
     app.updated_at = new Date().toISOString();
     save();
-    notify(app.applicant_id, 'application', 'Отклик отклонён', 'Автор публикации отклонил ваш отклик.', '/applications');
+    notify(app.applicant_id, 'application', 'Отклик отклонён', 'Автор публикации отклонил ваш отклик.', '/activity');
     return redirect(res, '/applications?msg=declined');
   }
 
@@ -321,7 +416,7 @@ function pageDeals(res, user, url) {
     const other = state.users.find(u => u.id === (d.buyer_id === user.id ? d.seller_id : d.buyer_id));
     return '<a class="card" style="display:block;color:inherit" href="/deal?id=' + encodeURIComponent(d.id) + '"><div class="row-between"><b>' + esc(post ? post.title : 'Сделка ScRl') + '</b><span class="badge badge-muted">' + esc(d.status) + '</span></div><p class="muted small mt-1">' + (d.buyer_id === user.id ? 'Исполнитель: ' : 'Заказчик: ') + esc(other ? other.full_name : '') + '</p><div class="row-between mt-1"><b>' + (d.price ? d.price + ' ScRl' : d.deal_type === 'barter' ? 'Обмен' : 'Бесплатно') + '</b><span class="muted small">Открыть сделку →</span></div></a>';
   }).join('');
-  sendHtml(res, layout('Мои сделки', user, flashBox(url) + '<h1>Мои сделки</h1>' + (cards || '<div class="card"><p class="muted">У вас пока нет сделок. Найдите публикацию на доске спроса или предложений и отправьте отклик.</p><div class="row mt-2"><a class="btn btn-primary" href="/demand">Доска спроса</a><a class="btn btn-ghost" href="/offers">Доска предложений</a></div></div>')));
+  sendHtml(res, layout('Мои сделки', user, flashBox(url) + '<h1>Мои сделки</h1>' + (cards || '<div class="card"><p class="muted">У вас пока нет сделок. Найдите публикацию на доске спроса или предложений и отправьте отклик.</p><div class="row mt-2"><a class="btn btn-primary" href="/board">Общая доска</a><a class="btn btn-ghost" href="/board">Общая доска</a></div></div>')));
 }
 
 function pageDeal(res, user, url) {
@@ -586,7 +681,7 @@ function markNotificationsRead(res, user) {
 }
 
 module.exports = {
-  pageDemand, pageOffers, handleCreateDemand, handleCreateOffer, handleRespond,
+  pageCommunity, handleCreateBoard, pageDemand, pageOffers, handleCreateDemand, handleCreateOffer, handleRespond,
   pageApplications, handleApplicationAction, pageDeals, pageDeal, handleDealMessage,
   handleDealDeliver, handleDealConfirm, handleDealCancel, handleDealDispute, handleDealReview,
   pageProfile, toggleFavorite, pageFavorites, handlePostReport, handleClosePost,
