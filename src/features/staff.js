@@ -213,6 +213,7 @@ function pageAdminUsers(res, user, url) {
   const teachersCount = activeUsers.filter(person => person.role === 'teacher').length;
   const blockedCount = activeUsers.filter(person => person.is_blocked).length;
   const deletedCount = state.users.filter(person => person.deleted_at || person.role === 'deleted').length;
+  const money = value => Math.max(0, Number(value) || 0).toLocaleString('ru-RU');
 
   const visibleUsers = state.users
     .filter(person => showDeleted
