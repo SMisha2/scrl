@@ -227,7 +227,7 @@ function pageCommunity(res, user, url) {
         '<label>Причина</label><select name="reason_code"><option value="unsafe">Опасная услуга или товар</option><option value="privacy">Личные данные</option><option value="harassment">Оскорбления или угрозы</option><option value="spam">Спам или обман</option><option value="other">Другое</option></select>' +
         '<textarea name="details" maxlength="300" rows="2" placeholder="Дополнительные детали"></textarea><button class="btn btn-ghost btn-sm">Отправить жалобу</button></form></details>'
       : '';
-    return '<article class="card">' +
+    return '<article class="card board-post">'+
       '<div class="row-between"><div class="row"><span class="badge badge-primary-soft">' + kindLabel + '</span><span class="badge badge-muted">' + esc(post.category || 'Другое') + '</span>' + moderation + '</div><span class="muted small">' + new Date(post.created_at).toLocaleDateString('ru-RU') + '</span></div>' +
       '<h2 class="mt-1">' + esc(post.title) + '</h2><p>' + esc(post.description).replace(/\n/g, '<br>') + '</p>' +
       '<div class="row-between mt-1"><b class="accent">' + esc(moneyLabel(post)) + '</b><span class="muted small">' + esc(author ? author.full_name : 'Участник') + (author && author.class_name ? ' · ' + esc(author.class_name) : '') + '</span></div>' +
@@ -238,6 +238,7 @@ function pageCommunity(res, user, url) {
   }).join('');
 
   const form = renderBoardPostForm(categories, { force_free: !canTrade(user), price_mode: canTrade(user) ? 'negotiable' : 'free' });
+  const compose = '<details class="compose-panel"><summary><span><span class="compose-title">Новая публикация</span><span class="compose-subtitle">Создать запрос или предложение</span></span></summary><div class="compose-body">' + form + '</div></details>';
   const filters = '<section class="card"><form method="GET" action="/board"><div class="grid grid-3">' +
     '<div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div>' +
     '<div><label>Показывать</label><select name="kind"><option value="all"' + (kindFilter === 'all' ? ' selected' : '') + '>Всё вместе</option><option value="demand"' + (kindFilter === 'demand' ? ' selected' : '') + '>Мне нужно</option><option value="offer"' + (kindFilter === 'offer' ? ' selected' : '') + '>Я могу</option></select></div>' +
@@ -247,7 +248,7 @@ function pageCommunity(res, user, url) {
     'document.querySelectorAll("[data-deadline-date]").forEach(function(el){const p=el.dataset.deadlineDate.split("-").map(Number);const date=new Date(p[0],p[1]-1,p[2],12,0,0);if(!Number.isNaN(date.getTime()))el.textContent=date.toLocaleDateString("ru-RU",{day:"2-digit",month:"long",year:"numeric"});});' +
     '</script>';
   const recommendations = recommendedHelpOffers(user).map(match =>
-    '<article class="card"><div class="row-between"><span class="badge badge-success">Подходит к вашему запросу</span><span class="badge badge-muted">' + esc(match.offer.category) + '</span></div>' +
+    '<article class="card help-match"><div class="row-between"><span class="badge badge-success">Подходит к вашему запросу</span><span class="badge badge-muted">' + esc(match.offer.category) + '</span></div>' +
     '<p class="muted small mt-1">По запросу: ' + esc(match.request.title) + '</p>' +
     '<h3 class="mt-1">' + esc(match.offer.title) + '</h3><p>' + esc(match.offer.description).replace(/\\n/g, '<br>') + '</p>' +
     '<div class="row-between mt-1"><b>' + esc(moneyLabel(match.offer)) + '</b><span class="muted small">' + esc(match.author.full_name) + (match.author.class_name ? ' · ' + esc(match.author.class_name) : '') + '</span></div>' +
@@ -259,7 +260,7 @@ function pageCommunity(res, user, url) {
     : '';
   sendHtml(res, layout('Общая доска', user,
     flashBox(url) + '<div class="row-between"><div><h1>Общая доска</h1><p class="muted">Все запросы и предложения в одной ленте.</p></div><span class="badge badge-muted">' + posts.length + ' публикаций</span></div>' +
-    recommendationSection + form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + deadlineDisplayScript
+    recommendationSection + compose + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + deadlineDisplayScript
   ));
 }
 
