@@ -1,5 +1,6 @@
 const { balance } = require('../store');
 const { esc } = require('../utils/http');
+const { unreadCount } = require('../utils/notifications');
 const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#FAFAF9;color:#1C1917;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.5;min-height:100vh}
@@ -244,14 +245,15 @@ function autoRefreshScript() {
 function layout(title, user, content) {
   const navItems = !user ? '' : `
     ${user.role === 'student' ? `
-      <a href="/app">Главная</a><a href="/marketplace">Каталог</a>
-      <a href="/demand">Спрос</a><a href="/offer">Предложения</a>
+      <a href="/app">Главная</a><a href="/market">Маркет</a>
+      <a href="/demand">Спрос</a><a href="/offers">Предложения</a>
       <a href="/applications">Отклики</a><a href="/deals">Сделки</a>
       <a href="/auctions">Аукционы</a><a href="/wallet">Кошелёк</a>
-      <a href="/notifications">Уведомления</a><a href="/profile">Профиль</a>
+      <a href="/notifications">Уведомления${unreadCount(user.id) ? ' (' + unreadCount(user.id) + ')' : ''}</a>
+      <a href="/favorites">Избранное</a><a href="/profile">Профиль</a>
     ` : ''}
-    ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a>` : ''}
-    ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/finance">Финансы</a>` : ''}
+    ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a><a href="/auctions">Аукционы</a>` : ''}
+    ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/auctions">Аукционы</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/financial">Финансы</a>` : ''}
   `;
   const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
   const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
