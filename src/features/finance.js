@@ -62,7 +62,7 @@ function createSandboxOperation(res, user, params, type) {
   });
   save();
   notify(user.id, 'finance', 'Тестовая операция создана', 'Это запись sandbox; баланс ScRl не изменён и реальные деньги не переводились.', '/wallet/rub');
-  return redirect(res, '/wallet/rub?msg=created');
+  return redirect(res, '/wallet/rub?msg=sandbox_created');
 }
 
 function handleSandboxTopUp(res, user, params) {
