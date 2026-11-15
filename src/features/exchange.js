@@ -234,7 +234,7 @@ function handleExchangeBuy(res, user, params) {
       recordTx('exchange_trade_vrub', user.id,
         { orderId: order.id, side, amount, price, cost, costCurrency: 'ScRl', commission, commissionRate: marketBefore.burnFeeRate },
         entries);
-      executedTrade = { amountScRl: sellerGets, amountVrub: amount, feeScRl: commission };
+      executedTrade = { amountScRl: cost, amountVrub: amount, feeScRl: commission };
     } else {
       // Buyer pays V-RUB for ScRl. The fee is withheld from delivery and burned.
       const commission = calculateBurnCommission(amount, marketBefore);
