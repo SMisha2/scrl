@@ -186,7 +186,8 @@ function handleApplicationAction(res, user, params) {
   const sellerId = app.post_kind === 'demand' ? app.applicant_id : post.user_id;
   const price = app.proposal_type === 'paid' ? app.proposed_price : 0;
   const buyer = state.users.find(u => u.id === buyerId);
-  if (price > 0 && (!buyer || !canTrade(buyer))) return redirect(res, '/applications?error=age');
+  const seller = state.users.find(u => u.id === sellerId);
+  if (price > 0 && (!buyer || !seller || !canTrade(buyer) || !canTrade(seller))) return redirect(res, '/applications?error=age');
   if (price > 0 && balance(buyerId, 'available') < price) return redirect(res, '/applications?error=insufficient');
   const deal = {
     id: crypto.randomUUID(), post_id: post.id, post_kind: app.post_kind,
@@ -242,6 +243,7 @@ function pageDeal(res, user, url) {
     if (!isBuyer) actions += '<form method="POST" action="/deals/deliver"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><button class="btn btn-primary">Отметить выполнение</button></form>';
     if (isBuyer && deal.status === 'in_progress') actions += '<form method="POST" action="/deals/confirm"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><button class="btn btn-primary">Подтвердить и завершить</button></form>';
     actions += '<form method="POST" action="/deals/dispute"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><input name="reason" required maxlength="500" placeholder="Причина спора"><button class="btn btn-ghost">Открыть спор</button></form>';
+    actions += '<form method="POST" action="/deals/cancel"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><button class="btn btn-ghost">Отменить до выполнения</button></form>';
   } else if (deal.status === 'awaiting_confirmation' && isBuyer) {
     actions = '<form method="POST" action="/deals/confirm"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><button class="btn btn-primary">Подтвердить и завершить</button></form><form method="POST" action="/deals/dispute"><input type="hidden" name="deal_id" value="' + esc(deal.id) + '"><input name="reason" required maxlength="500" placeholder="Причина спора"><button class="btn btn-ghost">Открыть спор</button></form>';
   }
@@ -295,6 +297,28 @@ function handleDealConfirm(res, user, params) {
   save();
   notify(deal.seller_id, 'deal', 'Сделка завершена', 'Заказчик подтвердил выполнение.', '/deal?id=' + deal.id);
   return redirect(res, '/deal?id=' + deal.id + '&msg=confirmed');
+}
+
+function handleDealCancel(res, user, params) {
+  const deal = state.deals.find(d => d.id === params.get('deal_id'));
+  if (!deal || ![deal.buyer_id, deal.seller_id].includes(user.id) ||
+      !['accepted', 'in_progress'].includes(deal.status)) return redirect(res, '/deals?error=bad');
+  if (deal.price > 0) {
+    recordTx('deal_escrow_refund', user.id, { dealId: deal.id, amount: deal.price }, [
+      { accountId: account(deal.buyer_id, 'held').id, amount: -deal.price, note: 'Отмена до выполнения' },
+      { accountId: account(deal.buyer_id, 'available').id, amount: deal.price, note: 'Возврат escrow' }
+    ]);
+  }
+  deal.status = 'cancelled';
+  deal.cancelled_at = new Date().toISOString();
+  state.admin_audit_logs.push({
+    id: crypto.randomUUID(), actor_id: user.id, action: 'deal_cancelled',
+    target_id: deal.id, reason: 'Cancelled before delivery', created_at: new Date().toISOString()
+  });
+  save();
+  notify(deal.buyer_id, 'deal', 'Сделка отменена', 'Сделка отменена до выполнения. Зарезервированные ScRl возвращены.', '/deals');
+  notify(deal.seller_id, 'deal', 'Сделка отменена', 'Сделка отменена до выполнения.', '/deals');
+  return redirect(res, '/deal?id=' + deal.id + '&msg=cancelled');
 }
 
 function handleDealDispute(res, user, params) {
@@ -424,7 +448,7 @@ function markNotificationsRead(res, user) {
 module.exports = {
   pageDemand, pageOffers, handleCreateDemand, handleCreateOffer, handleRespond,
   pageApplications, handleApplicationAction, pageDeals, pageDeal, handleDealMessage,
-  handleDealDeliver, handleDealConfirm, handleDealDispute, handleDealReview,
+  handleDealDeliver, handleDealConfirm, handleDealCancel, handleDealDispute, handleDealReview,
   pageProfile, toggleFavorite, pageFavorites, handlePostReport, handleClosePost,
   pageNotifications, markNotificationsRead, unreadCount
 };
