@@ -4,6 +4,18 @@ const { canTrade } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
+function exchangeEscrow(orderId, sellerId) {
+  const held = state.accounts.find(item => item.user_id === sellerId && item.kind === 'held');
+  if (!held) return { amount: 0, held: null };
+  const txIds = new Set(state.transactions
+    .filter(tx => tx.payload && tx.payload.orderId === orderId)
+    .map(tx => tx.id));
+  const amount = state.entries
+    .filter(entry => txIds.has(entry.tx_id) && entry.account_id === held.id)
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  return { amount, held };
+}
+
 function pageExchange(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const tradeable = canTrade(user);
@@ -73,8 +85,9 @@ function handleExchangeCancel(res, user, params) {
   const orderId = params.get('order_id');
   const order = state.exchange_orders.find(item => item.id === orderId && item.status === 'active');
   if (!order || order.seller_id !== user.id) return redirect(res, '/exchange?error=bad');
-  const held = state.accounts.find(item => item.user_id === user.id && item.kind === 'held');
-  if (!held || held.balance < order.amount) return redirect(res, '/exchange?error=escrow');
+  const escrow = exchangeEscrow(order.id, user.id);
+  const held = escrow.held;
+  if (!held || escrow.amount !== order.amount || held.balance < order.amount) return redirect(res, '/exchange?error=escrow');
   try {
     recordTx('exchange_cancel', user.id, { orderId, amount: order.amount }, [
       { accountId: held.id, amount: -order.amount, note: 'Отмена заявки' },
@@ -109,8 +122,9 @@ function handleExchangeBuy(res, user, params) {
       !Number.isSafeInteger(cost) || cost < 1) return redirect(res, '/exchange?error=order');
   if (balance(user.id, 'vrub') < cost) return redirect(res, '/exchange?error=novrub');
 
-  const held = state.accounts.find(item => item.user_id === seller.id && item.kind === 'held');
-  if (!held || held.balance < amount) return redirect(res, '/exchange?error=escrow');
+  const escrow = exchangeEscrow(order.id, seller.id);
+  const held = escrow.held;
+  if (!held || escrow.amount !== amount || held.balance < amount) return redirect(res, '/exchange?error=escrow');
   const commission = Math.min(amount - 1, Math.floor(amount * 0.01));
   const buyerGets = amount - commission;
   try {
