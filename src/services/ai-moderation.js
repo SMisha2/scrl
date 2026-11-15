@@ -1,7 +1,11 @@
 const { analyseText } = require('./moderation-rules');
 
-const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENROUTER_MODEL_ROUTER = 'openrouter/free';
+const GIGACHAT_OAUTH_ENDPOINT = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
+const GIGACHAT_CHAT_ENDPOINT = 'https://api.giga.chat/v1/chat/completions';
+const GIGACHAT_MODEL = process.env.SCRL_GIGACHAT_MODEL || 'GigaChat';
+let cachedGigaToken = null;
+let cachedGigaTokenExpiresAt = 0;
+let pendingGigaTokenRequest = null;
 const MAX_INPUT_CHARS = 2200;
 const REQUEST_TIMEOUT_MS = 6500;
 
@@ -157,14 +161,55 @@ function mergeResults(ruleResult, aiResult) {
 
 function getApiConfig() {
   if (process.env.SCRL_AI_MODERATION_ENABLED !== 'true') return null;
-  const apiKey = String(process.env.SCRL_OPENROUTER_API_KEY || '').trim();
-  if (!apiKey) return null;
+  const authKey = String(process.env.SCRL_GIGACHAT_AUTH_KEY || '').trim();
+  if (!authKey) return null;
   return {
-    endpoint: OPENROUTER_ENDPOINT,
-    apiKey,
-    model: OPENROUTER_MODEL_ROUTER,
-    provider: 'openrouter'
+    endpoint: GIGACHAT_CHAT_ENDPOINT,
+    authEndpoint: GIGACHAT_OAUTH_ENDPOINT,
+    authKey,
+    model: GIGACHAT_MODEL,
+    provider: 'gigachat'
   };
+}
+
+async function getGigaChatAccessToken(config) {
+  if (cachedGigaToken && Date.now() < cachedGigaTokenExpiresAt - 60000) {
+    return cachedGigaToken;
+  }
+  if (pendingGigaTokenRequest) return pendingGigaTokenRequest;
+
+  pendingGigaTokenRequest = (async () => {
+    const response = await fetch(config.authEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Basic ' + config.authKey,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'RqUID': require('node:crypto').randomUUID()
+      },
+      body: 'scope=GIGACHAT_API_PERS',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+    if (!response.ok) {
+      throw new Error('GigaChat OAuth HTTP ' + response.status);
+    }
+    const payload = await response.json();
+    if (typeof payload.access_token !== 'string' || !payload.access_token) {
+      throw new Error('GigaChat OAuth returned no access token');
+    }
+    cachedGigaToken = payload.access_token;
+    const expiry = Number(payload.expires_at);
+    cachedGigaTokenExpiresAt = Number.isFinite(expiry) && expiry > 0
+      ? expiry * 1000
+      : Date.now() + 29 * 60 * 1000;
+    return cachedGigaToken;
+  })();
+
+  try {
+    return await pendingGigaTokenRequest;
+  } finally {
+    pendingGigaTokenRequest = null;
+  }
 }
 
 function markForReviewWhenAiUnavailable(ruleResult) {
@@ -200,11 +245,13 @@ async function analyseSubmission(value) {
   if (!safeText) return markForReviewWhenAiUnavailable(ruleResult);
 
   try {
+    const accessToken = await getGigaChatAccessToken(config);
     const response = await fetch(config.endpoint, {
       method: 'POST',
       headers: {
-        Authorization: 'Bearer ' + config.apiKey,
-        'Content-Type': 'application/json'
+        Authorization: 'Bearer ' + accessToken,
+        'Content-Type': 'application/json',
+        'User-Agent': 'ScRl-moderation/1.0'
       },
       body: JSON.stringify({
         model: config.model,
@@ -217,17 +264,13 @@ async function analyseSubmission(value) {
           }
         ],
         temperature: 0,
-        max_tokens: 180,
-        provider: {
-          zdr: true,
-          data_collection: 'deny'
-        }
+        max_tokens: 180
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
     if (!response.ok) {
-      console.warn('Extended moderation unavailable; routing submission to human review. HTTP ' + response.status);
+      console.warn('GigaChat moderation unavailable; routing submission to human review. HTTP ' + response.status);
       return markForReviewWhenAiUnavailable(ruleResult);
     }
 
