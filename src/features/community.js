@@ -167,7 +167,7 @@ function handleApplicationDecision(res,user,params) {
     ]);
   }
   const deal={id:crypto.randomUUID(),application_id:app.id,post_id:post.id,post_type:app.post_type,
-    buyer_id:buyerId,seller_id:sellerId,price,status:'in_progress',created_at:new Date().toISOString()};
+    buyer_id:buyerId,seller_id:sellerId,price,terms_mode:post.price_mode||'fixed',status:'in_progress',created_at:new Date().toISOString()};
   state.deals.push(deal); app.status='accepted'; post.status='in_progress';
   notify(buyerId,'deal','Сделка создана','Условия приняты. Сделка создана.','/deals');
   notify(sellerId,'deal','Сделка создана','Условия приняты. Сделка создана.','/deals');
@@ -183,7 +183,14 @@ function pageDeals(res,user,url) {
     if(d.status==='in_progress'&&d.seller_id===user.id) actions+='<form method="POST" action="/deals/action"><input type="hidden" name="deal_id" value="'+d.id+'"><input type="hidden" name="action" value="deliver"><button class="btn btn-primary btn-sm">Отметить выполненным</button></form>';
     if(d.status==='waiting_confirmation'&&d.buyer_id===user.id) actions+='<form method="POST" action="/deals/action"><input type="hidden" name="deal_id" value="'+d.id+'"><input type="hidden" name="action" value="confirm"><button class="btn btn-primary btn-sm">Подтвердить и оплатить</button></form>';
     if(d.status==='in_progress'||d.status==='waiting_confirmation') actions+='<form method="POST" action="/deals/action"><input type="hidden" name="deal_id" value="'+d.id+'"><input type="hidden" name="action" value="dispute"><button class="btn btn-ghost btn-sm">Открыть спор</button></form>';
-    return '<div class="card"><div class="row-between"><b>'+esc(p?p.title:'Сделка')+'</b><span class="badge badge-muted">'+esc(d.status)+'</span></div><p class="muted small">Участник: '+esc(other?other.full_name:'—')+' · '+d.price+' ScRl'+(d.price===0?' · бесплатно':' в escrow')+'</p><div class="row mt-1">'+actions+'</div></div>';
+    const messages=state.deal_messages.filter(m=>m.deal_id===d.id).slice(-8);
+    const thread=messages.map(m=>{const author=state.users.find(u=>u.id===m.user_id);return '<div class="card" style="padding:10px;margin:8px 0"><b class="small">'+esc(author?author.full_name:'Участник')+'</b><p>'+esc(m.message)+'</p><span class="muted small">'+new Date(m.created_at).toLocaleString('ru-RU')+'</span></div>';}).join('');
+    const canMessage=['in_progress','waiting_confirmation','disputed'].includes(d.status);
+    const chat=canMessage?'<div class="mt-1"><h3>Переписка по сделке</h3>'+(thread||'<p class="muted small">Сообщений пока нет.</p>')+'<form method="POST" action="/deals/message"><input type="hidden" name="deal_id" value="'+d.id+'"><textarea name="message" rows="2" maxlength="1000" required placeholder="Сообщение участнику сделки"></textarea><button class="btn btn-ghost btn-sm">Отправить</button></form></div>':'';
+    const reviewExists=state.reviews.some(r=>r.deal_id===d.id&&r.reviewer_id===user.id);
+    const review=d.status==='completed'&&d.buyer_id===user.id&&!reviewExists?'<form method="POST" action="/deals/review" class="mt-1"><input type="hidden" name="deal_id" value="'+d.id+'"><label>Оценка исполнителя</label><select name="rating"><option value="5">5 — отлично</option><option value="4">4 — хорошо</option><option value="3">3 — нормально</option><option value="2">2 — плохо</option><option value="1">1 — очень плохо</option></select><textarea name="comment" rows="2" maxlength="400" placeholder="Комментарий (необязательно)"></textarea><button class="btn btn-ghost btn-sm">Оставить отзыв</button></form>':'';
+    const priceText=d.terms_mode==='barter'?'Обмен':d.terms_mode==='free'?'Бесплатно':d.price+' ScRl'+(d.price>0?' в escrow':'');
+    return '<div class="card"><div class="row-between"><b>'+esc(p?p.title:'Сделка')+'</b><span class="badge badge-muted">'+esc(d.status)+'</span></div><p class="muted small">Участник: '+esc(other?other.full_name:'—')+' · '+priceText+'</p><div class="row mt-1">'+actions+'</div>'+chat+review+'</div>';
   }).join('');
   sendHtml(res,layout('Мои сделки',user,flashBox(url)+'<h1>Мои сделки</h1>'+(cards||'<div class="card muted">Пока нет сделок. Найдите публикацию и откликнитесь.</div>')));
 }
@@ -211,6 +218,30 @@ function handleDealAction(res,user,params) {
   save(); redirect(res,'/deals?msg=delivered');
 }
 
+
+function handleDealMessage(res,user,params) {
+  const deal=state.deals.find(x=>x.id===params.get('deal_id'));
+  const message=(params.get('message')||'').trim();
+  if(!deal||(deal.buyer_id!==user.id&&deal.seller_id!==user.id)||
+     !['in_progress','waiting_confirmation','disputed'].includes(deal.status)||
+     message.length<1||message.length>1000) return redirect(res,'/deals?error=bad');
+  state.deal_messages.push({id:crypto.randomUUID(),deal_id:deal.id,user_id:user.id,message,created_at:new Date().toISOString()});
+  const recipient=deal.buyer_id===user.id?deal.seller_id:deal.buyer_id;
+  notify(recipient,'message','Новое сообщение по сделке','У вас новое сообщение по сделке.','/deals');
+  save(); redirect(res,'/deals');
+}
+
+function handleDealReview(res,user,params) {
+  const deal=state.deals.find(x=>x.id===params.get('deal_id')&&x.status==='completed'&&x.buyer_id===user.id);
+  const rating=Number(params.get('rating'));
+  const comment=(params.get('comment')||'').trim();
+  if(!deal||!Number.isInteger(rating)||rating<1||rating>5||
+     state.reviews.some(r=>r.deal_id===deal.id&&r.reviewer_id===user.id)) return redirect(res,'/deals?error=bad');
+  state.reviews.push({id:crypto.randomUUID(),deal_id:deal.id,reviewer_id:user.id,reviewed_user_id:deal.seller_id,rating,comment:comment.slice(0,400),created_at:new Date().toISOString()});
+  notify(deal.seller_id,'review','Новый отзыв','Покупатель оставил отзыв по завершённой сделке.','/profile');
+  save(); redirect(res,'/deals?msg=confirmed');
+}
+
 function handleFavoriteToggle(res,user,params) {
   const type=params.get('post_type'), post=findPost(params.get('post_id'),type);
   if(!post||post.status!=='active'||post.user_id===user.id) return redirect(res,'/marketplace?error=bad');
@@ -236,7 +267,10 @@ function pageNotifications(res,user) {
 function pageProfile(res,user,url) {
   const completed=state.deals.filter(x=>x.status==='completed'&&(x.buyer_id===user.id||x.seller_id===user.id)).length;
   const posts=state.demands.concat(state.offers).filter(x=>x.user_id===user.id&&x.status==='active').length;
-  sendHtml(res,layout('Профиль',user,flashBox(url)+'<h1>Профиль</h1><div class="card"><h2>'+esc(user.full_name)+'</h2><p class="muted">'+esc(user.class_name||'Участник ScRl')+'</p><p class="mt-1">'+esc(user.bio||'Добавьте краткое описание своих интересов и навыков.')+'</p><div class="row mt-1"><span class="badge badge-primary-soft">Активных публикаций: '+posts+'</span><span class="badge badge-success">Завершённых сделок: '+completed+'</span></div></div><div class="card"><h2>О себе</h2><form method="POST" action="/profile/update"><textarea name="bio" rows="4" maxlength="400" placeholder="Расскажите о своих навыках и интересах">'+esc(user.bio||'')+'</textarea><button class="btn btn-primary">Сохранить профиль</button></form></div>'));
+  const reviews=state.reviews.filter(x=>x.reviewed_user_id===user.id);
+  const average=reviews.length?(reviews.reduce((s,x)=>s+x.rating,0)/reviews.length).toFixed(1):'—';
+  const reviewHtml=reviews.slice(-10).reverse().map(x=>'<div class="card"><b>'+x.rating+'/5</b><p>'+esc(x.comment||'Без комментария')+'</p></div>').join('');
+  sendHtml(res,layout('Профиль',user,flashBox(url)+'<h1>Профиль</h1><div class="card"><h2>'+esc(user.full_name)+'</h2><p class="muted">'+esc(user.class_name||'Участник ScRl')+'</p><p class="mt-1">'+esc(user.bio||'Добавьте краткое описание своих интересов и навыков.')+'</p><div class="row mt-1"><span class="badge badge-primary-soft">Активных публикаций: '+posts+'</span><span class="badge badge-success">Завершённых сделок: '+completed+'</span><span class="badge badge-accent">Рейтинг: '+average+' ('+reviews.length+')</span></div></div><div class="card"><h2>О себе</h2><form method="POST" action="/profile/update"><textarea name="bio" rows="4" maxlength="400" placeholder="Расскажите о своих навыках и интересах">'+esc(user.bio||'')+'</textarea><button class="btn btn-primary">Сохранить профиль</button></form></div><h2 class="mt-2">Отзывы</h2>'+(reviewHtml||'<p class="muted">Отзывов пока нет.</p>')));
 }
 
 function handleProfileUpdate(res,user,params) {
@@ -254,4 +288,4 @@ function handleReport(res,user,params) {
   save(); redirect(res,'/notifications');
 }
 
-module.exports={notify,pageBoard,pageMarketplace,handleCreatePost,handleApply,pageApplications,handleApplicationDecision,pageDeals,handleDealAction,handleFavoriteToggle,pageFavorites,pageNotifications,pageProfile,handleProfileUpdate,handleReport};
+module.exports={notify,pageBoard,pageMarketplace,handleCreatePost,handleApply,pageApplications,handleApplicationDecision,pageDeals,handleDealAction,handleDealMessage,handleDealReview,handleFavoriteToggle,pageFavorites,pageNotifications,pageProfile,handleProfileUpdate,handleReport};
