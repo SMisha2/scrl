@@ -48,11 +48,25 @@ function pageAuctions(res, user, url) {
         ${canFinish ? `<form method="POST" action="/auctions/finish" class="mt-2"><input type="hidden" name="auction_id" value="${a.id}"><button class="btn btn-ghost btn-sm">Завершить сейчас (демо)</button></form>` : ''}
       </div>`;
     }).join('');
+  const finished = state.auctions.filter(x => x.status === 'finished')
+    .sort((x, y) => y.ends_at.localeCompare(x.ends_at)).slice(0, 10)
+    .map(x => {
+      const winner = state.users.find(u => u.id === x.current_winner_id);
+      const history = state.bids.filter(b => b.auction_id === x.id)
+        .sort((m, n) => n.created_at.localeCompare(m.created_at)).slice(0, 5)
+        .map(b => {
+          const bidder = state.users.find(u => u.id === b.bidder_id);
+          return '<li class="small">' + esc(bidder ? bidder.full_name : 'Участник') + ' — ' + b.amount + ' ScRl (' + esc(b.status) + ')</li>';
+        }).join('');
+      return '<div class="card"><div class="row-between"><b>' + esc(x.title) + '</b><span class="badge badge-muted">Завершён</span></div>' +
+        '<p class="muted small">Приз: ' + esc(x.prize) + ' · Победитель: ' + esc(winner ? winner.full_name : 'Нет ставок') + ' · ' + x.current_bid + ' ScRl</p>' +
+        '<details class="mt-1"><summary>История последних ставок</summary><ul>' + (history || '<li class="small">Ставок нет</li>') + '</ul></details></div>';
+    }).join('');
   const createForm = canCreate ? `<div class="card"><h2>Создать аукцион</h2>
     <form method="POST" action="/auctions/create">
       <div class="grid grid-2">
         <div><label>Название</label><input name="title" required></div>
-        <div><label>Приз</label><input name="prize" required placeholder="Пицца"></div>
+        <div><label>Неденежный приз</label><input name="prize" required maxlength="100" placeholder="Например, приз от лицея"></div>
       </div>
       <div class="grid grid-2">
         <div><label>Стартовая цена</label><input name="start_price" type="number" min="1" required></div>
@@ -63,9 +77,12 @@ function pageAuctions(res, user, url) {
     </form></div>` : '';
   sendHtml(res, layout('Аукционы', user, `
     ${flashBox(url)}
-    <h1>Аукционы</h1>
+    <h1>Аукционы ScRl</h1><p class="muted">Ставки — только внутренние ScRl. Денежные ставки и денежные призы отключены.</p>
     ${createForm}
-    ${items || '<p class="muted">Активных аукционов нет</p>'}`));
+    <h2 class="mt-2">Активные</h2>
+    ${items || '<p class="muted">Активных аукционов нет</p>'}
+    <h2 class="mt-2">Завершённые</h2>
+    ${finished || '<p class="muted">Завершённых аукционов пока нет.</p>'}`));
 }
 
 
@@ -77,6 +94,7 @@ function handleCreateAuction(res, user, params) {
   const step = parseInt(params.get('min_step') || '10', 10);
   const minutes = parseInt(params.get('duration_min') || '5', 10);
   if (!title || !prize || !start || start < 1) return redirect(res, '/auctions?error=fields');
+  if (/(\\bRUB\\b|руб(ль|ля|лей|ли)?|₽|денежн|наличн)/i.test(prize)) return redirect(res, '/auctions?error=bad');
   state.auctions.push({
     id: crypto.randomUUID(), title, prize, start_price: start, min_step: step || 10,
     current_bid: 0, current_winner_id: null,
