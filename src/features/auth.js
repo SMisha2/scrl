@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const { SESSION_MAX_AGE } = require('../config');
 const { state, account, systemAccount, save, recordTx, grantStartingVrub } = require('../store');
+const { getTokenMarketStats, calculateSignupBonusScRl } = require('../services/token-market');
 const { hashPassword, verifyPassword } = require('../security');
 const { sessions, parseCookies, sessionRecord, ageStatus } = require('../session');
 const { sendHtml, redirect } = require('../utils/http');
@@ -109,7 +110,7 @@ function pageRegister(res, user, url) {
     '<label>Дата рождения</label><input name="birth_date" type="date" required>' +
     '<button type="submit" class="btn btn-primary btn-block">Создать аккаунт</button></form>' +
     '<p class="text-center mt-2">Уже есть аккаунт? <a href="/login">Войти</a></p>' +
-    '<p class="muted small mt-2">При регистрации начисляется 100 ScRl. До 14 лет торговля недоступна.</p></div>'));
+    '<p class="muted small mt-2">Стартовый бонус ScRl рассчитывается по текущему соотношению валют. До 14 лет торговля недоступна.</p></div>'));
 }
 
 function doRegister(req, res, params) {
@@ -127,9 +128,9 @@ function doRegister(req, res, params) {
   if (state.users.some(item => item.email === email)) return redirect(res, '/register?error=email');
 
   const reserve = systemAccount('reserve');
-  if (!reserve || !Number.isSafeInteger(reserve.balance) || reserve.balance < 100) {
-    return redirect(res, '/register?error=ledger');
-  }
+  // Capture the economy-wide ratio before this user's starter V-RUB grant
+  // changes the supply used to calculate their welcome ScRl amount.
+  const signupRateAtRegistration = getTokenMarketStats().referenceRate;
 
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -144,20 +145,31 @@ function doRegister(req, res, params) {
   account(id, 'vrub_held');
   grantStartingVrub(id, 'registration');
 
-  try {
-    recordTx('signup_bonus', id, { amount: 100 }, [
-      { accountId: reserve.id, amount: -100 },
-      { accountId: available.id, amount: 100 }
-    ]);
-  } catch (error) {
-    state.users = state.users.filter(item => item.id !== id);
-    state.accounts = state.accounts.filter(item => item.user_id !== id);
-    state.vrub_ledger_entries = state.vrub_ledger_entries.filter(item => item.user_id !== id);
-    try { save(); } catch (saveError) {
-      console.error('Registration rollback save failed:', saveError.message);
+  const signupBonusScRl = calculateSignupBonusScRl(signupRateAtRegistration);
+  if (signupBonusScRl > 0 && reserve && reserve.balance >= signupBonusScRl) {
+    try {
+      recordTx('signup_bonus', id, { amount: signupBonusScRl, valueVrub: 5 }, [
+        { accountId: reserve.id, amount: -signupBonusScRl },
+        { accountId: available.id, amount: signupBonusScRl }
+      ]);
+    } catch (error) {
+      if (error.code !== 'backing_limit') {
+        state.users = state.users.filter(item => item.id !== id);
+        state.accounts = state.accounts.filter(item => item.user_id !== id);
+        state.vrub_ledger_entries = state.vrub_ledger_entries.filter(item => item.user_id !== id);
+        try { save(); } catch (saveError) {
+          console.error('Registration rollback save failed:', saveError.message);
+        }
+        console.error('Registration bonus failed:', error.message);
+        return redirect(res, '/register?error=ledger');
+      }
+      // If capacity changed before commit, keep registration and omit ScRl.
+      save();
     }
-    console.error('Registration bonus failed:', error.message);
-    return redirect(res, error.code === 'backing_limit' ? '/register?error=backing_limit' : '/register?error=ledger');
+  } else {
+    // V-RUB starter credit remains; whole ScRl units are not over-issued
+    // when the fixed 5 V-RUB-equivalent allowance is below one token.
+    save();
   }
 
   const token = crypto.randomUUID();
