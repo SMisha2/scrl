@@ -164,7 +164,7 @@ function pageModeration(res, user, url) {
       '<td class="small">' + esc(entry.reason || 'Не указано') + '</td></tr>';
   }).join('');
   sendHtml(res, layout('Модерация', user, flashBox(url) +
-    '<div class="row-between"><div><h1>Центр модерации</h1>' +
+    '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted small">Решение всегда принимает администратор.</p>' +
     (getApiConfig() ? '<p class="small"><span class="badge badge-accent">Расширенная проверка подключена</span></p>' : '<p class="small muted">Расширенная проверка не настроена. Работают локальные правила.</p>') +
     '</div><div class="row"><form method="POST" action="/admin/moderation/scan"><button class="btn btn-ghost">Повторно проверить публикации</button></form><a class="btn btn-primary" href="/admin/ai">Помощник</a></div></div>' +
     metrics + search + '<h2 class="mt-2">Проверки и споры (' + cases.length + ')</h2>' +
@@ -506,7 +506,7 @@ function pageAiChat(res, user, url) {
     '</b><p class="mt-1">' + esc(x.content).replace(/\n/g, '<br>') + '</p><span class="muted small">' +
     new Date(x.created_at).toLocaleString('ru-RU') + '</span></div>').join('');
   sendHtml(res, layout('AI Moderator', user,
-    '<div class="row-between"><div><h1>AI Moderator</h1></div><a class="btn btn-ghost btn-sm" href="/admin/moderation">К модерации</a></div>' +
+    '<div class="row-between"><div><h1>AI Moderator</h1><p class="muted small">Только подсказки, без автоматических решений.</p></div><a class="btn btn-ghost btn-sm" href="/admin/moderation">К модерации</a></div>' +
     '' +
     (transcript || '<div class="card"><p class="muted">История диалога пуста.</p></div>') +
     '<form class="card" method="POST" action="/admin/ai/chat"><label>Сообщение помощнику</label><textarea name="message" rows="3" maxlength="1000" required></textarea><button class="btn btn-primary">Отправить</button></form>'));
