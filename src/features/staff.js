@@ -47,7 +47,7 @@ function handleIssue(res, user, params) {
   const userId = params.get('user_id');
   const amount = Number(params.get('amount') || 0);
   const reason = (params.get('reason') || 'Другое').trim().slice(0, 180) || 'Другое';
-  const student = state.users.find(item => item.id === userId && item.role === 'student');
+  const student = state.users.find(item => item.id === userId && item.role === 'student' && item.class_name === user.class_name);
   if (!student || !Number.isSafeInteger(amount) || amount < 1 || amount > WEEKLY_LIMIT) {
     return redirect(res, '/teacher?error=fields');
   }
