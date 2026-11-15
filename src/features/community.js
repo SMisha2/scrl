@@ -262,7 +262,7 @@ function pageCommunity(res, user, url) {
   sendHtml(res, layout('Общая доска', user,
     flashBox(url) + '<div class="page-heading"><h1>Доска помощи</h1><p class="muted">Запросы и предложения учеников.</p></div>' +
     recommendationSection + compose + filters + '<div class="row-between board-count"><span class="muted small">' + posts.length + ' публикаций</span></div>' +
-    '<div class="board-feed">' + (cards || '<p class="muted" style="padding:24px 0">Публикаций пока нет. Создай первую или измени фильтры.</p>') + '</div>' + deadlineDisplayScript
+    '<div class="board-feed">' + (cards || '<p class="muted" style="padding:24px 0">Пока тихо. Будь первым — выложи, что тебе нужно.</p>') + '</div>' + deadlineDisplayScript
   ));
 }
 

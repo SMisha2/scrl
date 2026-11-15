@@ -272,6 +272,31 @@ tbody tr:last-child td{border-bottom:0}
   .admin-user-filters{gap:12px}
 }
 
+/* === ScRl «журнал и доска» === */
+:root{
+  --page-bg:#f6f4ec;--surface:#fdfcf7;--surface-soft:#eef0e9;
+  --text:#2e352f;--muted:#79817a;--border:#e0ded2;
+  --accent:#31614b;--accent-hover:#274f3c;--accent-soft:#e4ebe2;
+  --accent-button:#31614b;--accent-button-hover:#274f3c;--accent-button-text:#f6f4ec;
+  --warm:#a08339;--danger:#a8574d;
+}
+:root[data-theme="dark"]{
+  --page-bg:#212721;--surface:#29302a;--surface-soft:#313a33;
+  --text:#e8ebe3;--muted:#a3aca1;--border:#3c453d;
+  --accent:#a9c4ad;--accent-hover:#c2d6c5;--accent-soft:#33413a;
+  --accent-button:#3c5a49;--accent-button-hover:#476a56;--accent-button-text:#eef2ea;
+  --warm:#c8a95e;--danger:#cf9a8f;
+}
+h1,h2,.logo,.home-section-title{font-family:Georgia,"Times New Roman",serif}
+h1{font-weight:700;letter-spacing:-.01em}
+h2{font-weight:700;letter-spacing:0}
+.logo{font-size:20px;letter-spacing:0}
+.logo .coin{font-family:Georgia,serif;font-size:12px}
+.header{border-bottom:3px double var(--border)}
+th{letter-spacing:.07em}
+::selection{background:var(--accent-soft);color:var(--text)}
+.board-post>p a,.card p a{text-decoration:underline;text-underline-offset:3px}
+:root[data-theme="dark"] .amount-positive{color:#9dc4a9!important}
 `;
 
 
@@ -326,11 +351,12 @@ function layout(title, user, content) {
 
   return `<!DOCTYPE html><html lang="ru" data-theme="light"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%2331614b'/%3E%3Ctext x='16' y='22' font-family='Georgia,serif' font-size='18' fill='%23f6f4ec' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E">
 <script>(function(){try{var t=localStorage.getItem('scrl-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 <title>${esc(title)} · ScRl</title><style>${CSS}</style></head>
 <body><header class="header"><div class="container header-inner">
-<a href="/" class="logo">ScRl</a>${nav}${right}
-</div></header><main class="container">${content}</main>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
+<a href="/" class="logo"><span class="coin">S</span>ScRl</a>${nav}${right}
+</div></header><main class="container">${content}</main><footer class="container" style="padding-top:14px;padding-bottom:24px;border-top:1px solid var(--border);color:var(--muted);font-size:11px">ScRl · проект учеников Республиканского лицея</footer>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
 }
 
 function themeScript() {
