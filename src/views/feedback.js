@@ -70,6 +70,13 @@ function errText(code) {
 function flashBox(url) {
   const msg = url.searchParams.get('msg');
   const err = url.searchParams.get('error');
+  if (msg === 'scan') {
+    const scannedValue = Number(url.searchParams.get('scanned') || 0);
+    const flaggedValue = Number(url.searchParams.get('flagged') || 0);
+    const scanned = Number.isSafeInteger(scannedValue) ? Math.max(0, Math.min(1000000, scannedValue)) : 0;
+    const flagged = Number.isSafeInteger(flaggedValue) ? Math.max(0, Math.min(1000000, flaggedValue)) : 0;
+    return `<div class="alert alert-success">Повторная проверка завершена. Проверено: ${scanned}. На ручную проверку отправлено: ${flagged}.</div>`;
+  }
   if (msg) return `<div class="alert alert-success">${esc(msgText(msg))}</div>`;
   if (err) return `<div class="alert alert-danger">${esc(errText(err))}</div>`;
   return '';
