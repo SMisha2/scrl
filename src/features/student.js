@@ -39,9 +39,13 @@ function pageApp(res, user, url) {
     </div>
     ${!tradeable ? `<div class="alert alert-info">Покупки и аукционы доступны с 14 лет. Вы можете получать токены и просматривать маркет.</div>` : ''}
     <div class="grid grid-3">
-      <a href="/market" class="card" style="text-decoration:none;color:inherit"><b>Маркетплейс</b><div class="muted small">Услуги учеников</div></a>
-      <a href="/auctions" class="card" style="text-decoration:none;color:inherit"><b>Аукционы</b><div class="muted small">Призы за токены</div></a>
-      <a href="/exchange" class="card" style="text-decoration:none;color:inherit"><b>Биржа</b><div class="muted small">ScRl ↔ вирт. рубли</div></a>
+      <a href="/marketplace" class="card" style="text-decoration:none;color:inherit"><b>Каталог</b><div class="muted small">Спрос и предложения</div></a>
+      <a href="/demand" class="card" style="text-decoration:none;color:inherit"><b>Мне нужно</b><div class="muted small">Создать запрос</div></a>
+      <a href="/offer" class="card" style="text-decoration:none;color:inherit"><b>Я могу</b><div class="muted small">Опубликовать навык</div></a>
+      <a href="/deals" class="card" style="text-decoration:none;color:inherit"><b>Мои сделки</b><div class="muted small">Статусы и переписка</div></a>
+      <a href="/auctions" class="card" style="text-decoration:none;color:inherit"><b>Аукционы</b><div class="muted small">Внутренние ставки ScRl</div></a>
+      <a href="/notifications" class="card" style="text-decoration:none;color:inherit"><b>Уведомления</b><div class="muted small">Отклики и сообщения</div></a>
+    </div></a>
     </div>
     <div class="grid grid-2 mt-2">
       <div class="card"><h2>Последние операции</h2>${recent ? `<ul style="list-style:none">${recent}</ul>` : '<p class="muted small">Пока пусто</p>'}</div>
@@ -74,6 +78,7 @@ function pageWallet(res, user, url) {
       <div class="card"><div class="muted small">Вирт. рубли</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'vrub')}</div></div>
       <div class="card"><div class="muted small">Статус</div><div style="font-size:22px;font-weight:700">${ageStatus(user.birth_date)}</div></div>
     </div>
+    <div class="row mt-1"><a class="btn btn-ghost btn-sm" href="/wallet/rub">RUB операции и статус платёжного модуля</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a></div>
     <div class="card"><h2>История операций</h2>
       ${rows ? `<table><thead><tr><th>Дата</th><th>Тип</th><th>Комментарий</th><th style="text-align:right">Сумма</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">Пока пусто</p>'}
     </div>`));
