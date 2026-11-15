@@ -487,6 +487,7 @@ function layout(title, user, content) {
     student: [
       { href: '/app', label: 'Главная' },
       { href: '/exchange', label: 'Биржа ScRl', className: 'nav-exchange' },
+      { href: '/auctions', label: 'Аукционы' },
       { href: '/board', label: 'Доска помощи' },
       { href: '/orders', label: 'Заказы' },
       { href: '/activity', label: 'Мои дела' },
