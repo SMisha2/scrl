@@ -72,10 +72,22 @@ function pageApp(res, user, url) {
     '</section>' +
     (!tradeable ? '<p class="muted small" style="margin-bottom:18px">Платные сделки и аукционы доступны с 14 лет. Бесплатная помощь доступна всем участникам.</p>' : '') +
     '<nav class="home-actions" aria-label="Основные действия">' +
-      '<a class="btn btn-primary" href="/board">Открыть доску помощи</a>' +
-      '<a href="/activity">Мои отклики</a>' +
+      '<a class="btn btn-primary" href="/board">Найти помощь или предложить свою</a>' +
+      '<a href="/activity">Мои дела</a>' +
       '<a href="/wallet">Кошелёк</a>' +
+      '<a href="/auctions">Аукционы</a>' +
     '</nav>' +
+    '<section class="earn-guide" id="earn-guide" aria-labelledby="earn-guide-title">' +
+      '<div class="earn-guide-heading"><div><h2 id="earn-guide-title">Как получить ScRl</h2>' +
+      '<p>Есть четыре понятных способа пополнить баланс.</p></div><a class="small" href="/wallet">История начислений →</a></div>' +
+      '<div class="earn-guide-grid">' +
+        '<div class="earn-guide-item"><b>1. Стартовый бонус</b><p>При регистрации система начисляет разовый бонус. Его размер зависит от текущего курса и доступного резерва.</p></div>' +
+        '<div class="earn-guide-item"><b>2. За вклад в лицей</b><p>Учитель или школа могут поощрить ScRl за помощь другим, проект, достижения или инициативу. Спроси учителя, как отметить свой вклад.</p></div>' +
+        '<div class="earn-guide-item"><b>3. За платную помощь</b><p>Предложи свои навыки на доске и заранее согласуй цену. После подтверждения результата заказчиком оплата поступит исполнителю.</p></div>' +
+        '<div class="earn-guide-item"><b>4. Обмен на бирже</b><p>ScRl можно обменять на V-RUB или купить за V-RUB. Торговые действия доступны с 14 лет; V-RUB — виртуальные единицы, не реальные деньги. <a href="/exchange">Открыть биржу →</a></p></div>' +
+      '</div>' +
+      '<p class="muted small" style="margin-top:13px">Важно: публикация объявления и обычный отклик сами по себе не начисляют ScRl автоматически.</p>' +
+    '</section>' +
     '<div class="home-sections">' +
       '<section><h2 class="home-section-title">Текущие договорённости</h2>' +
         (activeDeals ? '<ul class="home-list">' + activeDeals + '</ul>' :
@@ -98,6 +110,23 @@ function pageApp(res, user, url) {
 
 function pageWallet(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
+  const transactionLabels = {
+    signup_bonus: 'Стартовый бонус',
+    credit_teacher: 'Поощрение от учителя',
+    credit_admin: 'Начисление школы',
+    deal_settlement: 'Оплата за помощь',
+    deal_escrow: 'Резерв оплаты по сделке',
+    deal_escrow_refund: 'Возврат оплаты по сделке',
+    deal_dispute_refund: 'Возврат после спора',
+    deal_dispute_release: 'Выплата после спора',
+    exchange_trade: 'Покупка ScRl',
+    exchange_trade_vrub: 'Покупка V-RUB',
+    exchange_hold: 'Резерв на бирже',
+    exchange_vrub_hold: 'Резерв V-RUB на бирже',
+    exchange_cancel: 'Возврат с биржи',
+    exchange_vrub_cancel: 'Возврат V-RUB с биржи',
+    transfer: 'Перевод'
+  };
   const rows = state.entries
     .filter(e => {
       const acc = state.accounts.find(a => a.id === e.account_id);
@@ -108,8 +137,8 @@ function pageWallet(res, user, url) {
     .map(e => {
       const tx = state.transactions.find(t => t.id === e.tx_id);
       return `<tr><td class="muted small">${new Date(e.created_at).toLocaleString('ru-RU')}</td>
-        <td>${esc(tx ? tx.kind : '')}</td><td class="muted">${esc(e.note || '')}</td>
-        <td style="text-align:right" class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${e.amount}</td></tr>`;
+        <td>${esc(tx ? (transactionLabels[tx.kind] || 'Операция') : 'Операция')}</td><td class="muted">${esc(e.note || '')}</td>
+        <td style="text-align:right" class="${e.amount > 0 ? 'badge badge-success' : 'badge badge-danger'}">${e.amount > 0 ? '+' : ''}${Number(e.amount).toLocaleString('ru-RU')}</td></tr>`;
     }).join('');
   const vrubRows = (state.vrub_ledger_entries || [])
     .filter(entry => entry.user_id === user.id && ['initial_grant', 'opening_balance'].includes(entry.event_type) && Number(entry.amount) > 0)
@@ -120,14 +149,15 @@ function pageWallet(res, user, url) {
   sendHtml(res, layout('Кошелёк', user, `
     ${flashBox(url)}
     <h1>Кошелёк</h1>
-    <div class="grid grid-4">
+    <p class="muted small wallet-intro">Здесь находятся твои балансы и история. <a href="/app#earn-guide">Как получить ScRl?</a></p>
+    <div class="grid grid-3">
       <div class="card"><div class="muted small">Доступно</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'available')} ScRl</div></div>
       <div class="card"><div class="muted small">Заблокировано</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'held')} ScRl</div></div>
       <div class="card"><div class="muted small">V-RUB доступно</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'vrub')}</div></div>
       <div class="card"><div class="muted small">V-RUB заблокировано</div><div style="font-size:22px;font-weight:700">${balance(user.id, 'vrub_held')}</div></div>
       <div class="card"><div class="muted small">Статус</div><div style="font-size:22px;font-weight:700">${ageStatus(user.birth_date)}</div></div>
     </div>
-    <div class="row mt-1"><a class="btn btn-ghost btn-sm" href="/exchange">Открыть биржу ScRl / V-RUB</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a></div>
+    <div class="row mt-1"><a class="btn btn-primary btn-sm" href="/exchange">Обмен ScRl</a><a class="btn btn-ghost btn-sm" href="/auctions">Аукционы</a><a class="btn btn-ghost btn-sm" href="/favorites">Избранное</a><a class="small" href="/app#earn-guide">Откуда брать ScRl?</a></div>
     <div class="card"><h2>История операций</h2>
       ${historyRows ? `<table><thead><tr><th>Дата</th><th>Тип</th><th>Комментарий</th><th style="text-align:right">Сумма</th></tr></thead><tbody>${historyRows}</tbody></table>` : '<p class="muted">Пока пусто</p>'}
     </div>`));
