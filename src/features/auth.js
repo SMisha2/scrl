@@ -119,7 +119,7 @@ function doRegister(req, res, params) {
   const className = (params.get('class_name') || '').trim().slice(0, 20);
   const birthDate = params.get('birth_date') || '';
 
-  if (!fullName || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254 ||
+  if (!fullName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
       email.endsWith('@scrl.demo') || password.length < 8 || password.length > 1024 ||
       !className || ageStatus(birthDate) === 'unknown') {
     return redirect(res, '/register?error=fields');
