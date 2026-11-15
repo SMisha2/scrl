@@ -82,7 +82,7 @@ function renderBoardPostForm(categories, initial = {}, errorMessage = '') {
     'deadline.addEventListener("change",syncOffset);deadline.addEventListener("input",syncOffset);form.addEventListener("submit",syncOffset);syncOffset();}' +
     'mode.addEventListener("change",updatePrice);price.addEventListener("input",function(){if(mode.value==="range")max.min=price.value||"1";});' +
     'kind.addEventListener("change",updateKind);updatePrice();updateKind();})();</script>';
-  return '<section class="card"><div class="row-between"><div><h2>Новая публикация</h2><p class="muted small">Опишите, что вам нужно или чем вы можете помочь.</p></div><span class="badge badge-primary-soft">Бесплатно или за ScRl</span></div>' +
+  return '<section class="card"><div class="row-between"><div><h2>Новая публикация</h2></div><span class="badge badge-primary-soft">Бесплатно или за ScRl</span></div>' +
     (errorMessage ? '<div class="alert alert-danger mt-1">' + esc(errorMessage) + '</div>' : '') +
     '<form id="board-create-form" method="POST" action="/board/create" class="mt-1">' +
     '<div class="grid grid-2"><div><label>Тип публикации</label><select name="post_kind"><option value="demand"' + (kind === 'demand' ? ' selected' : '') + '>Мне нужна помощь</option><option value="offer"' + (kind === 'offer' ? ' selected' : '') + '>Я могу помочь</option></select></div>' +
@@ -92,7 +92,7 @@ function renderBoardPostForm(categories, initial = {}, errorMessage = '') {
     '<div class="grid grid-2"><div><label>Условия</label><select name="price_mode">' + options + '</select></div>' +
     '<div data-price-wrap><label data-price-label>Цена, ScRl</label><input name="price" type="number" min="1" max="1000000" step="1" value="' + esc(price) + '" placeholder="Укажите сумму" disabled></div></div>' +
     '<div class="grid grid-2"><div data-price-max-wrap hidden><label>Цена до, ScRl</label><input name="price_max" type="number" min="1" max="1000000" step="1" value="' + esc(priceMax) + '" placeholder="Верхняя граница" disabled></div>' +
-    '<div><label>Желаемый срок (необязательно)</label><input name="deadline" type="datetime-local" step="60" value="' + esc(deadline) + '"><input type="hidden" name="deadline_offset" value="0"><p class="muted small">Укажите дату и время, до которых должна быть выполнена задача.</p></div></div>' +
+    '<div><label>Желаемый срок (необязательно)</label><input name="deadline" type="datetime-local" step="60" value="' + esc(deadline) + '"><input type="hidden" name="deadline_offset" value="0"></div></div>' +
     '<button class="btn btn-primary" type="submit">Опубликовать</button></form>' + script + '</section>';
 }
 
@@ -137,9 +137,8 @@ function pageBoard(res, user, url, kind) {
   }).join('');
   const action = isDemand ? '/demand/create' : '/offers/create';
   const heading = isDemand ? 'Доска спроса' : 'Доска предложений';
-  const description = isDemand ? 'Опишите, что вам нужно. Другие ученики смогут откликнуться.' : 'Расскажите, что вы умеете и чем готовы поделиться.';
   const options = Object.keys(PRICE_MODES).map(key => '<option value="' + key + '">' + PRICE_MODES[key] + '</option>').join('');
-  const form = '<section class="card"><h2>' + (isDemand ? 'Создать запрос' : 'Создать предложение') + '</h2><p class="muted small">' + description + '</p>' +
+  const form = '<section class="card"><h2>' + (isDemand ? 'Создать запрос' : 'Создать предложение') + '</h2>' +
     '<form method="POST" action="' + action + '" class="mt-1"><label>Название</label><input name="title" maxlength="100" required placeholder="' + (isDemand ? 'Например: нужна помощь с Python' : 'Например: помогу с Python') + '">' +
     '<label>Описание</label><textarea name="description" rows="3" maxlength="1500" required></textarea>' +
     '<div class="grid grid-2"><div><label>Категория</label><input name="category" maxlength="40" required list="scrl-categories" placeholder="Программирование, языки..."><datalist id="scrl-categories">' + categories.map(c => '<option value="' + esc(c) + '">').join('') + '<option value="Учёба"><option value="Дизайн"><option value="Разработка"><option value="Творчество"><option value="Помощь"></datalist></div>' +
@@ -148,7 +147,7 @@ function pageBoard(res, user, url, kind) {
     '<label>Желаемый срок (необязательно)</label><input name="deadline" type="date">' +
     '<button class="btn btn-primary" type="submit">Опубликовать</button></form></section>';
   sendHtml(res, layout(heading, user,
-    flashBox(url) + '<div class="row-between"><div><h1>' + heading + '</h1><p class="muted">ScRl · Сообщество навыков и взаимопомощи</p></div><a class="btn btn-ghost btn-sm" href="/activity">Мои отклики</a></div>' +
+    flashBox(url) + '<div class="row-between"><h1>' + heading + '</h1><a class="btn btn-ghost btn-sm" href="/activity">Мои отклики</a></div>' +
     form + '<section class="card"><form method="GET" action="' + (isDemand ? '/demand' : '/offers') + '" class="grid grid-2"><div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div><div><label>Категория</label><select name="category"><option value="">Все категории</option>' + categories.map(c => '<option ' + (category === c ? 'selected' : '') + ' value="' + esc(c) + '">' + esc(c) + '</option>').join('') + '</select></div><button class="btn btn-ghost btn-sm">Применить фильтры</button></form></section>' +
     (cards || '<div class="card text-center"><h2>Пока нет публикаций</h2><p class="muted">Создайте первую публикацию или измените параметры поиска.</p></div>')
   ));
@@ -257,10 +256,10 @@ function pageCommunity(res, user, url) {
       esc(moneyLabel(match.offer)) + '</p></div>' + renderResponseForm({ ...match.offer, post_kind: 'offer' }) + '</article>'
   ).join('');
   const recommendationSection = recommendations
-    ? '<section class="help-recommendations"><h2>По твоим запросам</h2><p>Предложения из тех же категорий.</p>' + recommendations + '</section>'
+    ? '<section class="help-recommendations"><h2>Подходящие предложения</h2>' + recommendations + '</section>'
     : '';
   sendHtml(res, layout('Общая доска', user,
-    flashBox(url) + '<div class="page-heading"><h1>Доска помощи</h1><p class="muted">Запросы и предложения учеников.</p></div>' +
+    flashBox(url) + '<div class="page-heading"><h1>Доска помощи</h1></div>' +
     recommendationSection + compose + filters + '<div class="row-between board-count"><span class="muted small">' + posts.length + ' публикаций</span></div>' +
     '<div class="board-feed">' + (cards || '<p class="muted" style="padding:24px 0">Пока тихо. Будь первым — выложи, что тебе нужно.</p>') + '</div>' + deadlineDisplayScript
   ));
@@ -435,11 +434,11 @@ function pageApplications(res, user, url) {
       '<div class="row-between mt-1"><b>' + price + '</b><span class="small">Открыть →</span></div></a>';
   }).join('');
   sendHtml(res, layout('Активность', user,
-    flashBox(url) + '<div class="row-between"><div><h1>Активность</h1><p class="muted">Отклики и сделки в одном разделе.</p></div><a class="btn btn-ghost btn-sm" href="/board">На доску</a></div>' +
+    flashBox(url) + '<div class="row-between"><h1>Активность</h1><a class="btn btn-ghost btn-sm" href="/board">На доску</a></div>' +
     '<div class="grid grid-2"><section><h2>Входящие отклики <span class="muted small">(' + incoming.length + ')</span></h2>' +
     (incoming.map(app => card(app, true)).join('') || '<p class="muted">Пока нет входящих откликов.</p>') + '</section><section><h2>Мои отклики <span class="muted small">(' + outgoing.length + ')</span></h2>' +
     (outgoing.map(app => card(app, false)).join('') || '<p class="muted">Вы ещё не отправляли отклики.</p>') + '</section></div>' +
-    '<section class="mt-2" id="deals"><div class="row-between"><div><h2>Мои сделки <span class="muted small">(' + deals.length + ')</span></h2><p class="muted small">Переписка, выполнение и статусы.</p></div><a class="small" href="/deals">Все сделки →</a></div>' +
+    '<section class="mt-2" id="deals"><div class="row-between"><div><h2>Мои сделки <span class="muted small">(' + deals.length + ')</span></h2></div><a class="small" href="/deals">Все сделки →</a></div>' +
     (dealCards || '<div class="card"><p class="muted">Активных сделок пока нет. Откликнитесь на публикацию на общей доске.</p><a class="btn btn-primary btn-sm mt-1" href="/board">Открыть доску</a></div>') + '</section>'
   ));
 }
@@ -544,7 +543,7 @@ function pageDeals(res, user, url) {
     const other = state.users.find(u => u.id === (d.buyer_id === user.id ? d.seller_id : d.buyer_id));
     return '<a class="card" style="display:block;color:inherit" href="/deal?id=' + encodeURIComponent(d.id) + '"><div class="row-between"><b>' + esc(post ? post.title : 'Сделка ScRl') + '</b><span class="badge badge-muted">' + esc(d.status) + '</span></div><p class="muted small mt-1">' + (d.buyer_id === user.id ? 'Исполнитель: ' : 'Заказчик: ') + esc(other ? other.full_name : '') + '</p><div class="row-between mt-1"><b>' + (d.price ? d.price + ' ScRl' : d.deal_type === 'barter' ? 'Обмен' : 'Бесплатно') + '</b><span class="muted small">Открыть сделку →</span></div></a>';
   }).join('');
-  sendHtml(res, layout('Мои сделки', user, flashBox(url) + '<h1>Мои сделки</h1>' + (cards || '<div class="card"><p class="muted">У вас пока нет сделок. Найдите публикацию на доске спроса или предложений и отправьте отклик.</p><div class="row mt-2"><a class="btn btn-primary" href="/board">Общая доска</a><a class="btn btn-ghost" href="/board">Общая доска</a></div></div>')));
+  sendHtml(res, layout('Мои сделки', user, flashBox(url) + '<h1>Мои сделки</h1>' + (cards || '<div class="card"><p class="muted">Пока нет сделок.</p><div class="row mt-2"><a class="btn btn-primary" href="/board">Доска помощи</a><a class="btn btn-ghost" href="/market">Услуги</a></div></div>')));
 }
 
 function pageDeal(res, user, url) {
