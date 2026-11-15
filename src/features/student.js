@@ -63,7 +63,7 @@ function pageApp(res, user, url) {
   const titleName = String(user.full_name || 'ученик').trim().split(/\s+/)[0] || 'ученик';
   const content = flashBox(url) +
     '<header class="home-greeting"><h1>Привет, ' + esc(titleName) + '</h1>' +
-    '<p>Что тебе нужно сегодня?</p></header>' +
+    '<p>Найди помощь или предложи свою.</p></header>' +
     '<section class="home-balances" aria-label="Баланс">' +
       '<div class="home-balance"><small>Доступно</small><strong>' + available.toLocaleString('ru-RU') + ' ScRl</strong>' +
         '<span class="muted small">' + held.toLocaleString('ru-RU') + ' ScRl в резерве</span></div>' +
@@ -88,7 +88,7 @@ function pageApp(res, user, url) {
         '<a class="small" href="/wallet">История кошелька →</a>' +
       '</section>' +
     '</div>' +
-    '<section class="home-rate"><div class="row-between"><div><span class="muted small">Текущий ориентир</span>' +
+    '<section class="home-rate"><div class="row-between"><div><span class="muted small">Курс ScRl</span>' +
       '<div><strong>1 ScRl = ' + Number(market.referenceRate || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) +
       ' V-RUB</strong></div></div><a class="small" href="/exchange">Биржа →</a></div>' +
       '<p class="muted small" style="margin-top:5px">V-RUB — внутренняя виртуальная единица, не реальные деньги.</p></section>';
