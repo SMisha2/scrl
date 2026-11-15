@@ -14,6 +14,25 @@ function audit(admin, action, targetId, reason) {
   });
 }
 
+function dealLedgerState(deal) {
+  const held = state.accounts.find(item => item.user_id === deal.buyer_id && item.kind === 'held');
+  if (!held) return { escrow: 0, settlement: null };
+  const txs = state.transactions.filter(tx => tx.payload && tx.payload.dealId === deal.id);
+  const txIds = new Set(txs.map(tx => tx.id));
+  const escrow = state.entries
+    .filter(entry => txIds.has(entry.tx_id) && entry.account_id === held.id)
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const settlementTx = txs.find(tx => [
+    'deal_settlement', 'deal_escrow_refund',
+    'deal_dispute_refund', 'deal_dispute_release'
+  ].includes(tx.kind)) || null;
+  const decision = settlementTx
+    ? (settlementTx.kind === 'deal_settlement' || settlementTx.kind === 'deal_dispute_release'
+      ? 'release_seller' : 'refund_buyer')
+    : null;
+  return { escrow, settlement: settlementTx, decision, held };
+}
+
 function findPost(kind, id) {
   const list = kind === 'offer' ? state.offer_posts : state.demand_posts;
   return list.find(post => post.id === id) || null;
@@ -130,15 +149,18 @@ function handleModerationAction(res, user, params) {
     if (!deal || deal.status !== 'disputed') return redirect(res, '/admin/moderation?error=deal_state');
     if (!['refund_buyer', 'release_seller'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
 
-    const price = Math.max(0, Math.floor(Number(deal.price) || 0));
+    const price = Number(deal.price || 0);
+    if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/admin/moderation?error=deal_amount');
     const txKind = decision === 'refund_buyer' ? 'deal_dispute_refund' : 'deal_dispute_release';
-    const previous = state.transactions.find(tx => tx.payload?.dealId === deal.id &&
-      ['deal_dispute_refund', 'deal_dispute_release'].includes(tx.kind));
-    if (previous && previous.kind !== txKind) return redirect(res, '/admin/moderation?error=already_settled');
+    const ledgerState = dealLedgerState(deal);
+    const previous = ledgerState.settlement;
+    if (previous && ledgerState.decision !== decision) return redirect(res, '/admin/moderation?error=already_settled');
 
     if (price > 0 && !previous) {
-      const held = state.accounts.find(entry => entry.user_id === deal.buyer_id && entry.kind === 'held');
-      if (!held || held.balance < price) return redirect(res, '/admin/moderation?error=escrow_mismatch');
+      const held = ledgerState.held;
+      if (!held || ledgerState.escrow !== price || held.balance < price) {
+        return redirect(res, '/admin/moderation?error=escrow_mismatch');
+      }
       try {
         if (decision === 'refund_buyer') {
           recordTx(txKind, user.id, { dealId: deal.id, amount: price, decision }, [
