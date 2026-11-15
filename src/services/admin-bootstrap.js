@@ -6,7 +6,7 @@ function bootstrapAdmin() {
   const email = String(process.env.SCRL_ADMIN_EMAIL || '').trim().toLowerCase();
   const password = String(process.env.SCRL_ADMIN_PASSWORD || '');
   if (!email && !password) return false;
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 12 || password.length > 1024) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.endsWith('@scrl.demo') || password.length < 12 || password.length > 1024) {
     console.error('Set a valid SCRL_ADMIN_EMAIL and SCRL_ADMIN_PASSWORD with at least 12 characters.');
     return false;
   }
@@ -29,6 +29,10 @@ function bootstrapAdmin() {
     changed = true;
   } else if (!verifyPassword(password, user.password_hash)) {
     user.password_hash = hashPassword(password);
+    changed = true;
+  }
+  if (user.is_blocked) {
+    user.is_blocked = false;
     changed = true;
   }
 
