@@ -6,6 +6,7 @@ const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { notify, unreadCount } = require('../utils/notifications');
 const { analyseSubmission } = require('../services/ai-moderation');
+const { parseDeadline, resolvePostTerms } = require('../services/board-rules');
 
 function dealLedgerState(deal) {
   const held = state.accounts.find(item => item.user_id === deal.buyer_id && item.kind === 'held');
@@ -36,6 +37,61 @@ function moneyLabel(post) {
   if (post.price_mode === 'negotiable') return 'Договорная цена';
   if (post.price_mode === 'range') return (post.price_min || 0) + '–' + (post.price_max || 0) + ' ScRl';
   return (post.price || 0) + ' ScRl';
+}
+
+
+function deadlineMarkup(value) {
+  const raw = String(value || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return '<time data-deadline-date="' + esc(raw) + '">' + esc(raw) + '</time>';
+  }
+  return '<time data-deadline-utc="' + esc(raw) + '">' + esc(raw) + '</time>';
+}
+
+function renderBoardPostForm(categories, initial = {}, errorMessage = '') {
+  const mode = PRICE_MODES[initial.price_mode] ? initial.price_mode : 'negotiable';
+  const kind = initial.post_kind === 'offer' ? 'offer' : 'demand';
+  const options = Object.entries(PRICE_MODES).map(([key, label]) =>
+    '<option value="' + key + '"' + (mode === key ? ' selected' : '') + '>' + label + '</option>'
+  ).join('');
+  const categoryOptions = categories.map(value => '<option value="' + esc(value) + '">').join('');
+  const price = initial.price === undefined ? '' : String(initial.price);
+  const priceMax = initial.price_max === undefined ? '' : String(initial.price_max);
+  const deadline = String(initial.deadline || '');
+  const script = '<script>(function(){' +
+    'const form=document.getElementById("board-create-form");if(!form)return;' +
+    'const mode=form.elements.price_mode,price=form.elements.price,max=form.elements.price_max;' +
+    'const priceWrap=form.querySelector("[data-price-wrap]"),maxWrap=form.querySelector("[data-price-max-wrap]");' +
+    'const label=form.querySelector("[data-price-label]"),kind=form.elements.post_kind;' +
+    'const title=form.elements.title,description=form.elements.description,deadline=form.elements.deadline,offset=form.elements.deadline_offset;' +
+    'function updatePrice(){const fixed=mode.value==="fixed",range=mode.value==="range";' +
+    'priceWrap.hidden=!(fixed||range);maxWrap.hidden=!range;price.disabled=!(fixed||range);max.disabled=!range;' +
+    'price.required=fixed||range;max.required=range;price.min=(fixed||range)?"1":"0";max.min=range?"1":"0";' +
+    'label.textContent=range?"Цена от, ScRl":"Цена, ScRl";' +
+    'if(!fixed&&!range){price.value="";max.value="";}else if(fixed){max.value="";}' +
+    'if(range){max.min=price.value||"1";}}' +
+    'function updateKind(){title.placeholder=kind.value==="demand"?"Например: нужна помощь с Python":"Например: помогу с Python";' +
+    'description.placeholder=kind.value==="demand"?"Опишите, с чем нужна помощь":"Опишите, чем вы можете помочь";}' +
+    'function localValue(date){const p=n=>String(n).padStart(2,"0");return date.getFullYear()+"-"+p(date.getMonth()+1)+"-"+p(date.getDate())+"T"+p(date.getHours())+":"+p(date.getMinutes());}' +
+    'if(deadline){const minDate=new Date();minDate.setSeconds(0,0);minDate.setMinutes(minDate.getMinutes()+2);deadline.min=localValue(minDate);' +
+    'function syncOffset(){if(!deadline.value){offset.value="0";deadline.setCustomValidity("");return;}' +
+    'const parsed=new Date(deadline.value);if(Number.isNaN(parsed.getTime())){deadline.setCustomValidity("Проверьте дату и время.");return;}' +
+    'offset.value=String(parsed.getTimezoneOffset());deadline.setCustomValidity(parsed.getTime()<Date.now()-60000?"Срок должен быть в будущем.":"");}' +
+    'deadline.addEventListener("change",syncOffset);deadline.addEventListener("input",syncOffset);form.addEventListener("submit",syncOffset);syncOffset();}' +
+    'mode.addEventListener("change",updatePrice);price.addEventListener("input",function(){if(mode.value==="range")max.min=price.value||"1";});' +
+    'kind.addEventListener("change",updateKind);updatePrice();updateKind();})();</script>';
+  return '<section class="card"><div class="row-between"><div><h2>Новая публикация</h2><p class="muted small">Опишите, что вам нужно или чем вы можете помочь.</p></div><span class="badge badge-primary-soft">Бесплатно или за ScRl</span></div>' +
+    (errorMessage ? '<div class="alert alert-danger mt-1">' + esc(errorMessage) + '</div>' : '') +
+    '<form id="board-create-form" method="POST" action="/board/create" class="mt-1">' +
+    '<div class="grid grid-2"><div><label>Тип публикации</label><select name="post_kind"><option value="demand"' + (kind === 'demand' ? ' selected' : '') + '>Мне нужна помощь</option><option value="offer"' + (kind === 'offer' ? ' selected' : '') + '>Я могу помочь</option></select></div>' +
+    '<div><label>Категория</label><input name="category" maxlength="40" required list="board-categories" value="' + esc(initial.category || '') + '" placeholder="Например, программирование"><datalist id="board-categories">' + categoryOptions + '<option value="Учёба"><option value="Дизайн"><option value="Разработка"><option value="Творчество"><option value="Помощь"></datalist></div></div>' +
+    '<label>Название</label><input name="title" maxlength="100" required value="' + esc(initial.title || '') + '" placeholder="' + (kind === 'demand' ? 'Например: нужна помощь с Python' : 'Например: помогу с Python') + '">' +
+    '<label>Описание</label><textarea name="description" rows="3" maxlength="1500" required placeholder="' + (kind === 'demand' ? 'Опишите, с чем нужна помощь' : 'Опишите, чем вы можете помочь') + '">' + esc(initial.description || '') + '</textarea>' +
+    '<div class="grid grid-2"><div><label>Условия</label><select name="price_mode">' + options + '</select></div>' +
+    '<div data-price-wrap><label data-price-label>Цена, ScRl</label><input name="price" type="number" min="1" max="1000000" step="1" value="' + esc(price) + '" placeholder="Укажите сумму" disabled></div></div>' +
+    '<div class="grid grid-2"><div data-price-max-wrap hidden><label>Цена до, ScRl</label><input name="price_max" type="number" min="1" max="1000000" step="1" value="' + esc(priceMax) + '" placeholder="Верхняя граница" disabled></div>' +
+    '<div><label>Желаемый срок (необязательно)</label><input name="deadline" type="datetime-local" step="60" value="' + esc(deadline) + '"><input type="hidden" name="deadline_offset" value="0"><p class="muted small">Укажите дату и время, до которых должна быть выполнена задача.</p></div></div>' +
+    '<button class="btn btn-primary" type="submit">Опубликовать</button></form>' + script + '</section>';
 }
 
 function pageBoard(res, user, url, kind) {
@@ -96,6 +152,31 @@ function pageBoard(res, user, url, kind) {
   ));
 }
 
+
+function renderResponseForm(post) {
+  const isDemand = post.post_kind === 'demand';
+  const mode = PRICE_MODES[post.price_mode] ? post.price_mode : 'negotiable';
+  const priceInput = ['range', 'negotiable'].includes(mode)
+    ? '<label>' + (mode === 'range' ? 'Выберите цену в указанном диапазоне, ScRl' : 'Предложите цену, ScRl') + '</label>' +
+      '<input name="proposed_price" type="number" min="' + (mode === 'range' ? Number(post.price_min || 1) : 1) +
+      '" max="' + (mode === 'range' ? Number(post.price_max || 1000000) : 1000000) +
+      '" step="1" required placeholder="' + (mode === 'range' ? 'От ' + Number(post.price_min || 1) + ' до ' + Number(post.price_max || 1) : 'Ваша цена') + '">'
+    : '<p class="muted small mt-1">' +
+      (mode === 'fixed' ? 'Цена зафиксирована автором публикации: ' + Number(post.price || 0) + ' ScRl.' :
+        mode === 'free' ? 'Автор предлагает помощь бесплатно.' : 'Автор предлагает обмен услугами.') +
+      '</p>';
+  const label = isDemand ? 'Чем вы можете помочь?' : 'Какая помощь вам нужна?';
+  const placeholder = isDemand
+    ? 'Опишите, как вы поможете решить запрос автора.'
+    : 'Опишите, какая именно помощь вам нужна и что требуется сделать.';
+  return '<form method="POST" action="/posts/respond" class="mt-1">' +
+    '<input type="hidden" name="post_id" value="' + esc(post.id) + '">' +
+    '<input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
+    '<label>' + label + '</label><textarea name="message" rows="3" maxlength="700" required placeholder="' + placeholder + '"></textarea>' +
+    priceInput +
+    '<button class="btn btn-primary btn-sm" type="submit">' + (isDemand ? 'Предложить помощь' : 'Запросить помощь') + '</button></form>';
+}
+
 function pageCommunity(res, user, url) {
   if (user.role !== 'student') return redirect(res, '/');
   const q = (url.searchParams.get('q') || '').trim().toLowerCase();
@@ -125,13 +206,7 @@ function pageCommunity(res, user, url) {
     const moderation = post.status === 'pending' ? '<span class="badge badge-accent">На проверке</span>' : '';
     const responseForm = mine
       ? '<a class="btn btn-ghost btn-sm" href="/activity">Отклики (' + responses + ')</a>'
-      : '<form method="POST" action="/posts/respond" class="mt-1">' +
-        '<input type="hidden" name="post_id" value="' + esc(post.id) + '">' +
-        '<input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
-        '<label>Ваш отклик</label><textarea name="message" rows="2" maxlength="700" required placeholder="Коротко опишите, чем можете помочь"></textarea>' +
-        '<div class="grid grid-2"><div><label>Формат</label><select name="proposal_type"><option value="paid">За ScRl</option><option value="free">Бесплатно</option><option value="barter">Обмен</option></select></div>' +
-        '<div><label>Цена, ScRl</label><input name="proposed_price" type="number" min="1" placeholder="Цена"></div></div>' +
-        '<button class="btn btn-primary btn-sm" type="submit">Отправить отклик</button></form>';
+      : renderResponseForm(post);
     const reportForm = !mine
       ? '<details class="mt-1"><summary class="small muted" style="cursor:pointer">Пожаловаться</summary><form method="POST" action="/posts/report" class="mt-1">' +
         '<input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '">' +
@@ -142,57 +217,24 @@ function pageCommunity(res, user, url) {
       '<div class="row-between"><div class="row"><span class="badge badge-primary-soft">' + kindLabel + '</span><span class="badge badge-muted">' + esc(post.category || 'Другое') + '</span>' + moderation + '</div><span class="muted small">' + new Date(post.created_at).toLocaleDateString('ru-RU') + '</span></div>' +
       '<h2 class="mt-1">' + esc(post.title) + '</h2><p>' + esc(post.description).replace(/\n/g, '<br>') + '</p>' +
       '<div class="row-between mt-1"><b class="accent">' + esc(moneyLabel(post)) + '</b><span class="muted small">' + esc(author ? author.full_name : 'Участник') + (author && author.class_name ? ' · ' + esc(author.class_name) : '') + '</span></div>' +
-      (post.deadline ? '<p class="muted small mt-1">Срок: ' + esc(post.deadline) + '</p>' : '') +
+      (post.deadline ? '<p class="muted small mt-1">Выполнить до: ' + deadlineMarkup(post.deadline) + '</p>' : '') +
       '<div class="row mt-2">' + responseForm +
       '<form method="POST" action="/favorites/toggle"><input type="hidden" name="post_id" value="' + esc(post.id) + '"><input type="hidden" name="post_kind" value="' + post.post_kind + '"><button class="btn btn-ghost btn-sm">' + (favorite ? '★ В избранном' : '☆ В избранное') + '</button></form>' +
       reportForm + '</div></article>';
   }).join('');
 
-  const priceOptions = Object.keys(PRICE_MODES).map(key => '<option value="' + key + '">' + PRICE_MODES[key] + '</option>').join('');
-  const form = '<section class="card"><div class="row-between"><div><h2>Новая публикация</h2><p class="muted small">Опишите, что вам нужно или чем вы можете помочь.</p></div><span class="badge badge-primary-soft">Бесплатно или за ScRl</span></div>' +
-    '<form id="board-create-form" method="POST" action="/board/create" class="mt-1"><input type="hidden" name="return_to" value="board">' +
-    '<div class="grid grid-2"><div><label>Тип публикации</label><select name="post_kind"><option value="demand">Мне нужна помощь</option><option value="offer">Я могу помочь</option></select></div>' +
-    '<div><label>Категория</label><input name="category" maxlength="40" required list="board-categories" placeholder="Например, программирование"><datalist id="board-categories">' + categories.map(value => '<option value="' + esc(value) + '">').join('') + '<option value="Учёба"><option value="Дизайн"><option value="Разработка"><option value="Творчество"><option value="Помощь"></datalist></div></div>' +
-    '<label>Название</label><input name="title" maxlength="100" required placeholder="Кратко сформулируйте запрос или предложение">' +
-    '<label>Описание</label><textarea name="description" rows="3" maxlength="1500" required placeholder="Добавьте подробности"></textarea>' +
-    '<div class="grid grid-2"><div><label>Условия</label><select name="price_mode">' + priceOptions + '</select></div><div data-price-wrap><label data-price-label>Цена, ScRl</label><input name="price" type="number" min="1" max="1000000" value="0" disabled></div></div>' +
-    '<div class="grid grid-2"><div data-price-max-wrap hidden><label>До, ScRl</label><input name="price_max" type="number" min="1" max="1000000" value="0" disabled></div><div><label>Желаемый срок</label><input name="deadline" type="date"></div></div>' +
-    '<button class="btn btn-primary" type="submit">Опубликовать</button></form></section>';
+  const form = renderBoardPostForm(categories);
   const filters = '<section class="card"><form method="GET" action="/board"><div class="grid grid-3">' +
     '<div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div>' +
     '<div><label>Показывать</label><select name="kind"><option value="all"' + (kindFilter === 'all' ? ' selected' : '') + '>Всё вместе</option><option value="demand"' + (kindFilter === 'demand' ? ' selected' : '') + '>Мне нужно</option><option value="offer"' + (kindFilter === 'offer' ? ' selected' : '') + '>Я могу</option></select></div>' +
     '<div><label>Категория</label><select name="category"><option value="">Все категории</option>' + categories.map(value => '<option value="' + esc(value) + '"' + (category === value ? ' selected' : '') + '>' + esc(value) + '</option>').join('') + '</select></div></div><button class="btn btn-ghost btn-sm mt-1" type="submit">Применить</button> <a class="btn btn-ghost btn-sm" href="/board">Сбросить</a></form></section>';
-  const priceModeScript = `<script>
-  (function(){
-    const form=document.getElementById('board-create-form');
-    if(!form) return;
-    const mode=form.elements.price_mode, price=form.elements.price, max=form.elements.price_max;
-    const priceWrap=form.querySelector('[data-price-wrap]');
-    const maxWrap=form.querySelector('[data-price-max-wrap]');
-    const label=form.querySelector('[data-price-label]');
-    function update(){
-      const fixed=mode.value==='fixed', range=mode.value==='range';
-      priceWrap.hidden=!(fixed||range);
-      maxWrap.hidden=!range;
-      price.disabled=!(fixed||range);
-      max.disabled=!range;
-      price.required=fixed||range;
-      max.required=range;
-      price.min=(fixed||range)?'1':'0';
-      max.min=range?'1':'0';
-      label.textContent=range?'Цена от, ScRl':'Цена, ScRl';
-      if(!fixed&&!range){price.value='0';max.value='0';}
-      else if(fixed){max.value='0';}
-      if(range){max.min=price.value||'1';}
-    }
-    mode.addEventListener('change',update);
-    price.addEventListener('input',function(){if(mode.value==='range')max.min=price.value||'1';});
-    update();
-  })();
-  </script>`;
+  const deadlineDisplayScript = '<script>' +
+    'document.querySelectorAll("[data-deadline-utc]").forEach(function(el){const date=new Date(el.dataset.deadlineUtc);if(!Number.isNaN(date.getTime()))el.textContent=date.toLocaleString("ru-RU",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});});' +
+    'document.querySelectorAll("[data-deadline-date]").forEach(function(el){const p=el.dataset.deadlineDate.split("-").map(Number);const date=new Date(p[0],p[1]-1,p[2],12,0,0);if(!Number.isNaN(date.getTime()))el.textContent=date.toLocaleDateString("ru-RU",{day:"2-digit",month:"long",year:"numeric"});});' +
+    '</script>';
   sendHtml(res, layout('Общая доска', user,
     flashBox(url) + '<div class="row-between"><div><h1>Общая доска</h1><p class="muted">Все запросы и предложения в одной ленте.</p></div><span class="badge badge-muted">' + posts.length + ' публикаций</span></div>' +
-    form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + priceModeScript
+    form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + deadlineDisplayScript
   ));
 }
 
@@ -204,44 +246,70 @@ function handleCreateBoard(res, user, params) {
 function pageDemand(res, user, url) { return pageBoard(res, user, url, 'demand'); }
 function pageOffers(res, user, url) { return pageBoard(res, user, url, 'offer'); }
 
+function renderPostValidationError(res, user, initial, message) {
+  const categories = Array.from(new Set([
+    ...state.demand_posts.map(post => post.category),
+    ...state.offer_posts.map(post => post.category)
+  ].filter(Boolean))).sort();
+  const content = '<div class="row-between"><div><h1>Новая публикация</h1><p class="muted">Проверьте данные — введённый текст сохранён.</p></div><a class="btn btn-ghost btn-sm" href="/board">На доску</a></div>' +
+    renderBoardPostForm(categories, initial, message);
+  return sendHtml(res, layout('Проверка публикации', user, content), 422);
+}
+
 async function createPost(res, user, params, kind) {
   if (user.role !== 'student') return redirect(res, '/');
-  const isDemand = kind === 'demand';
-  const returnPath = params.get('return_to') === 'board' ? '/board' : (isDemand ? '/demand' : '/offers');
+  const selectedKind = params.get('post_kind') === 'offer' ? 'offer' : (kind === 'offer' ? 'offer' : 'demand');
   const title = (params.get('title') || '').trim().slice(0, 100);
   const description = (params.get('description') || '').trim().slice(0, 1500);
-  const category = (params.get('category') || 'Другое').trim().slice(0, 40);
+  const category = (params.get('category') || '').trim().slice(0, 40);
   const mode = PRICE_MODES[params.get('price_mode')] ? params.get('price_mode') : 'negotiable';
   let price = Number(params.get('price') || 0);
   let priceMax = Number(params.get('price_max') || 0);
-  const deadline = (params.get('deadline') || '').trim();
-  const deadlineDate = deadline ? new Date(deadline + 'T00:00:00Z') : null;
-  if (!title || !description || !category || !Number.isSafeInteger(price) || price < 0 || price > 1000000 ||
-      !Number.isSafeInteger(priceMax) || priceMax < 0 || priceMax > 1000000 ||
-      (deadline && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(deadline) ||
-        !Number.isFinite(deadlineDate.getTime()) || deadlineDate.toISOString().slice(0, 10) !== deadline))) {
-    return redirect(res, returnPath + '?error=fields');
+  const deadlineInput = (params.get('deadline') || '').trim();
+  const deadlineResult = parseDeadline(deadlineInput, params.get('deadline_offset') || '0');
+  const initial = {
+    post_kind: selectedKind, title, description, category,
+    price_mode: mode,
+    price: params.get('price') || '',
+    price_max: params.get('price_max') || '',
+    deadline: deadlineInput
+  };
+
+  if (!title || !description || !category) {
+    return renderPostValidationError(res, user, initial, 'Заполните название, категорию и описание публикации.');
+  }
+  if (['fixed', 'range'].includes(mode) &&
+      (!Number.isSafeInteger(price) || price < 1 || price > 1000000)) {
+    return renderPostValidationError(res, user, initial, 'Укажите целую цену от 1 до 1 000 000 ScRl.');
+  }
+  if (mode === 'range' &&
+      (!Number.isSafeInteger(priceMax) || priceMax < price || priceMax > 1000000)) {
+    return renderPostValidationError(res, user, initial, 'Верхняя граница должна быть целым числом и не меньше нижней границы.');
+  }
+  if (deadlineInput && !deadlineResult.ok) {
+    return renderPostValidationError(res, user, initial, 'Выберите корректные дату и время в будущем. Значение не должно быть раньше текущего времени.');
   }
   if (!['fixed', 'range'].includes(mode)) { price = 0; priceMax = 0; }
   if (mode === 'fixed') priceMax = 0;
-  if (mode === 'fixed' && price < 1) return redirect(res, returnPath + '?error=fields');
-  if (mode === 'range' && (price < 1 || priceMax < price || priceMax > 1000000)) return redirect(res, returnPath + '?error=fields');
+
   const moderation = await analyseSubmission(title + '\n' + description + '\n' + category);
+  const now = new Date().toISOString();
   const post = {
     id: crypto.randomUUID(), user_id: user.id, title, description, category,
     price_mode: mode, price, price_min: mode === 'range' ? price : null,
-    price_max: mode === 'range' ? priceMax : null, deadline: deadline || null,
+    price_max: mode === 'range' ? priceMax : null,
+    deadline: deadlineResult.value,
     status: moderation.requiresReview ? 'pending' : 'active',
     moderation_level: moderation.level, moderation_findings: moderation.findings,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    created_at: now, updated_at: now
   };
-  const target = isDemand ? state.demand_posts : state.offer_posts;
+  const target = selectedKind === 'demand' ? state.demand_posts : state.offer_posts;
   target.unshift(post);
   if (moderation.level !== 'low') {
     state.moderation_cases.unshift({
-      id: crypto.randomUUID(), kind: 'post', post_kind: kind, target_id: post.id,
+      id: crypto.randomUUID(), kind: 'post', post_kind: selectedKind, target_id: post.id,
       status: 'open', reason: moderation.findings.map(x => x.label).join('; '),
-      recommendation: moderation.recommendation, created_at: new Date().toISOString()
+      recommendation: moderation.recommendation, created_at: now
     });
   }
   save();
@@ -249,10 +317,11 @@ async function createPost(res, user, params, kind) {
     state.users.filter(admin => admin.role === 'admin').forEach(admin =>
       notify(admin.id, 'moderation', 'Новая публикация на проверке', 'Требуется проверка публикации «' + post.title + '».', '/admin/moderation')
     );
-    return redirect(res, returnPath + '?msg=pending_review');
+    return redirect(res, '/board?msg=pending_review');
   }
-  return redirect(res, returnPath + '?msg=created');
+  return redirect(res, '/board?msg=created');
 }
+
 
 async function handleCreateDemand(res, user, params) { return createPost(res, user, params, 'demand'); }
 async function handleCreateOffer(res, user, params) { return createPost(res, user, params, 'offer'); }
@@ -265,38 +334,25 @@ function handleRespond(res, user, params) {
   const post = collection.find(item => item.id === postId && item.status === 'active');
   const postOwner = post && state.users.find(item => item.id === post.user_id);
   const message = (params.get('message') || '').trim().slice(0, 700);
-  const proposalType = ['paid', 'free', 'barter'].includes(params.get('proposal_type'))
-    ? params.get('proposal_type') : 'paid';
-  const proposedPrice = Number(params.get('proposed_price') || 0);
-
-  if (!post || !postOwner || postOwner.is_blocked || post.user_id === user.id || !message ||
-      !Number.isSafeInteger(proposedPrice) || proposedPrice < 0 || proposedPrice > 1000000) {
-    return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=bad');
-  }
-  if (proposalType !== 'free') {
-    const owner = state.users.find(item => item.id === post.user_id);
-    if (!canTrade(user) || !owner || !canTrade(owner)) return redirect(res, '/applications?error=age');
+  if (!post || !postOwner || postOwner.is_blocked || post.user_id === user.id || !message) {
+    return redirect(res, '/board?kind=' + kind + '&error=bad');
   }
 
-  let resolvedPrice = 0;
-  if (proposalType === 'paid') {
-    if (post.price_mode === 'fixed') resolvedPrice = Number(post.price);
-    else if (post.price_mode === 'range') {
-      resolvedPrice = proposedPrice || Number(post.price_min || 0);
-      if (resolvedPrice < Number(post.price_min) || resolvedPrice > Number(post.price_max)) {
-        return redirect(res, '/applications?error=price_range');
-      }
-    } else resolvedPrice = proposedPrice;
+  // The publisher sets the contract type; the respondent only describes the request
+  // and, where necessary, proposes a price inside the published rules.
+  const terms = resolvePostTerms(post, params.get('proposed_price'));
+  if (!terms.ok) return redirect(res, '/board?kind=' + kind + '&error=' + terms.error);
+  const proposalType = terms.proposalType;
+  const resolvedPrice = terms.price;
 
-    if (!Number.isSafeInteger(resolvedPrice) || resolvedPrice < 1 || resolvedPrice > 1000000) {
-      return redirect(res, (kind === 'demand' ? '/demand' : '/offers') + '?error=fields');
-    }
+  if (proposalType !== 'free' && (!canTrade(user) || !canTrade(postOwner))) {
+    return redirect(res, '/activity?error=age');
   }
 
   if (state.applications.some(item =>
     item.post_id === postId && item.post_kind === kind &&
     item.applicant_id === user.id && item.status === 'pending'
-  )) return redirect(res, '/applications?error=bad');
+  )) return redirect(res, '/activity?error=duplicate');
 
   const application = {
     id: crypto.randomUUID(), post_id: post.id, post_kind: kind,
@@ -306,9 +362,12 @@ function handleRespond(res, user, params) {
   };
   state.applications.unshift(application);
   save();
-  notify(post.user_id, 'application', 'Новый отклик', 'На вашу публикацию откликнулся ученик.', '/activity');
-  return redirect(res, '/applications?msg=sent');
+  notify(post.user_id, 'application', kind === 'demand' ? 'Новый отклик на запрос' : 'Новый запрос на помощь',
+    kind === 'demand' ? 'Ученик предложил помощь по вашей публикации.' : 'Ученик запросил услугу из вашей публикации.',
+    '/activity');
+  return redirect(res, '/activity?msg=sent');
 }
+
 
 
 function pageApplications(res, user, url) {
@@ -319,9 +378,15 @@ function pageApplications(res, user, url) {
     const applicant = state.users.find(person => person.id === app.applicant_id);
     const post = (app.post_kind === 'demand' ? state.demand_posts : state.offer_posts).find(item => item.id === app.post_id);
     const canAct = received && app.status === 'pending' && post && post.status === 'active';
+    const isDemand = app.post_kind === 'demand';
+    const direction = received
+      ? (isDemand ? 'Предложение помощи от ' : 'Запрос от ') + (applicant ? applicant.full_name : 'участника')
+      : (isDemand ? 'Ваш отклик: вы предлагаете помощь' : 'Ваш запрос: вы просите помощь');
+    const terms = app.proposal_type === 'paid' ? app.proposed_price + ' ScRl'
+      : app.proposal_type === 'free' ? 'Бесплатно' : 'Обмен';
     return '<article class="card"><div class="row-between"><b>' + esc(post ? post.title : 'Публикация удалена') + '</b><span class="badge badge-muted">' + esc(app.status) + '</span></div>' +
-      '<p class="muted small">' + (received ? 'Отклик от ' + esc(applicant ? applicant.full_name : 'участника') : 'Ваш отклик') + ' · ' + new Date(app.created_at).toLocaleString('ru-RU') + '</p>' +
-      '<p class="mt-1">' + esc(app.message) + '</p><p class="mt-1"><b>' + (app.proposal_type === 'paid' ? app.proposed_price + ' ScRl' : app.proposal_type === 'free' ? 'Бесплатно' : 'Обмен') + '</b></p>' +
+      '<p class="muted small">' + direction + ' · ' + new Date(app.created_at).toLocaleString('ru-RU') + '</p>' +
+      '<p class="mt-1">' + esc(app.message) + '</p><p class="mt-1"><b>' + terms + '</b></p>' +
       (canAct ? '<div class="row mt-2"><form method="POST" action="/applications/action"><input type="hidden" name="application_id" value="' + esc(app.id) + '"><input type="hidden" name="decision" value="accept"><button class="btn btn-primary btn-sm">Принять и создать сделку</button></form><form method="POST" action="/applications/action"><input type="hidden" name="application_id" value="' + esc(app.id) + '"><input type="hidden" name="decision" value="decline"><button class="btn btn-ghost btn-sm">Отклонить</button></form></div>' : '') +
       (app.deal_id ? '<a class="btn btn-ghost btn-sm mt-1" href="/deal?id=' + encodeURIComponent(app.deal_id) + '">Открыть сделку</a>' : '') + '</article>';
   };
