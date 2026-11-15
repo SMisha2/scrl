@@ -232,7 +232,7 @@ function handleFinishAuction(res, user, params) {
     const held = state.accounts.find(item => item.user_id === auction.current_winner_id && item.kind === 'held');
     const burn = systemAccount('burn');
 
-    if (!previous && (!winningBid || !held || held.balance < auction.current_bid || !burn)) {
+    if (!previous && (!winningBid || !held || auctionEscrowBalance(auction.id, auction.current_winner_id) !== Number(auction.current_bid) || held.balance < auction.current_bid || !burn)) {
       auction.status = 'settlement_error';
       auction.settlement_error = 'Не удалось подтвердить победную ставку и её резерв.';
       auction.settlement_error_at = new Date().toISOString();
