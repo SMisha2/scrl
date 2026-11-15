@@ -217,7 +217,7 @@ function autoRefreshScript() {
 function layout(title, user, content) {
   const navItems = !user ? '' : `
     ${user.role === 'student' ? `
-      <a href="/app">Главная</a><a href="/board">Найти помощь</a>
+      <a href="/app">Главная</a><a href="/board">Доска помощи</a>
       <a href="/activity">Мои дела</a><a href="/wallet">Кошелёк</a>
     ` : ''}
     ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a><a href="/teacher/impact">Пульс класса</a><a href="/auctions">Аукционы</a>` : ''}
@@ -226,7 +226,7 @@ function layout(title, user, content) {
   const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
   const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
   const badge = user && user.role === 'student'
-    ? `<a class="header-balance" href="/wallet" title="Открыть кошелёк — текущие доступные балансы">
+    ? `<a class="header-balance" href="/wallet" title="Открыть кошелёк: доступные балансы">
         <span class="header-balance-item"><small>ScRl</small><b>${balance(user.id, 'available').toLocaleString('ru-RU')}</b></span>
         <span class="header-balance-divider">·</span>
         <span class="header-balance-item"><small>V-RUB</small><b>${balance(user.id, 'vrub').toLocaleString('ru-RU')}</b></span>
@@ -247,7 +247,7 @@ function layout(title, user, content) {
   return `<!DOCTYPE html><html lang="ru" data-theme="light"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>(function(){try{var t=localStorage.getItem('scrl-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
-<title>${esc(title)} — ScRl</title><style>${CSS}</style></head>
+<title>${esc(title)} · ScRl</title><style>${CSS}</style></head>
 <body><header class="header"><div class="container header-inner">
 <a href="/" class="logo">ScRl</a>${nav}${right}
 </div></header><main class="container">${content}</main>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
