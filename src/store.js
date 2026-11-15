@@ -80,6 +80,40 @@ function save() {
 }
 
 
+
+function ensureCollections() {
+  const collections = [
+    'demand_posts', 'offer_posts', 'applications', 'deals', 'deal_messages',
+    'notifications', 'favorites', 'reviews', 'reports', 'moderation_cases',
+    'moderation_actions', 'admin_audit_logs', 'ai_messages', 'money_operations',
+    'token_lots', 'token_ledger_entries', 'token_policy_versions',
+    'funding_sources', 'funding_reserves', 'payment_intents', 'payout_requests',
+    'provider_events', 'partner_settlements', 'refund_operations',
+    'withdrawal_eligibility_checks', 'guardian_links', 'consent_records',
+    'financial_audit_logs'
+  ];
+  let changed = false;
+  for (const name of collections) {
+    if (!Array.isArray(state[name])) {
+      state[name] = [];
+      changed = true;
+    }
+  }
+  if (!state.settings || typeof state.settings !== 'object') {
+    state.settings = {
+      payments_mode: 'disabled',
+      token_exchange_rate: 1,
+      token_exchange_rate_version: 1,
+      marketplace_commission_percent: 0,
+      teacher_weekly_limit: 500
+    };
+    changed = true;
+  }
+  if (changed) save();
+}
+
+ensureCollections();
+
 function account(userId, kind) {
   let a = state.accounts.find(x => x.user_id === userId && x.kind === kind);
   if (!a) {
