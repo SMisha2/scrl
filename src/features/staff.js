@@ -6,6 +6,9 @@ const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { getTokenMarketStats } = require('../services/token-market');
+const { sessions } = require('../session');
+const { hashPassword } = require('../security');
+const { changeUserRole, anonymizeUser } = require('../services/user-admin');
 function pageTeacher(res, user, url) {
   if (user.role !== 'teacher') return redirect(res, '/');
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -201,48 +204,155 @@ function pageAdmin(res, user, url) {
 
 function pageAdminUsers(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
-  const cards = state.users.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(u => {
-    const av = balance(u.id, 'available');
-    const hd = balance(u.id, 'held');
-    const vr = u.role === 'student' ? balance(u.id, 'vrub') : null;
-    const actions = u.role === 'student' ? `
-      <div class="mt-2 row">
-        <form method="POST" action="/admin/credit" class="row">
-          <input type="hidden" name="user_id" value="${u.id}">
-          <input name="amount" type="number" min="1" required placeholder="+" style="width:70px;margin:0">
-          <input name="reason" required placeholder="причина" style="width:140px;margin:0">
-          <button class="btn btn-primary btn-sm">Начислить</button>
-        </form>
-        <form method="POST" action="/admin/debit" class="row">
-          <input type="hidden" name="user_id" value="${u.id}">
-          <input name="amount" type="number" min="1" required placeholder="−" style="width:70px;margin:0">
-          <input name="reason" required placeholder="причина" style="width:140px;margin:0">
-          <button class="btn btn-danger btn-sm">Списать</button>
-        </form>
-        <form method="POST" action="/admin/block" class="row">
-          <input type="hidden" name="user_id" value="${u.id}">
-          <input type="hidden" name="block" value="${u.is_blocked ? '0' : '1'}">
-          <input name="reason" maxlength="300" required placeholder="${u.is_blocked ? 'Причина разблокировки' : 'Причина блокировки'}" style="width:190px;margin:0">
-          <button class="btn btn-ghost btn-sm">${u.is_blocked ? 'Разблокировать' : 'Заблокировать'}</button>
-        </form>
-      </div>` : '';
-    return `<div class="card">
-      <div class="row-between">
-        <div><b>${esc(u.full_name)}</b>
-          <div class="muted small">${esc(u.email)} · ${u.role}${u.birth_date ? ' · ' + ageStatus(u.birth_date) : ''}${u.class_name ? ' · ' + esc(u.class_name) : ''}${u.is_blocked ? ' · <span class="badge badge-danger">Заблокирован</span> · Причина: ' + esc(u.block_reason || 'Не указана') : ''}</div>
-        </div>
-        <div style="text-align:right"><div><b>${av}</b> ScRl</div>
-          <div class="muted small">${hd} в escrow${vr !== null ? ' · ' + vr + ' vrub' : ''}</div></div>
-      </div>
-      ${actions}
-    </div>`;
-  }).join('');
-  sendHtml(res, layout('Пользователи', user, `
-    ${flashBox(url)}
-    <div class="row-between"><h1>Пользователи</h1><a href="/admin" class="btn btn-ghost btn-sm">← Назад</a></div>
-    ${cards}`));
-}
 
+  const showDeleted = url.searchParams.get('show') === 'deleted';
+  const roleFilter = url.searchParams.get('role') || 'all';
+  const query = String(url.searchParams.get('q') || '').trim().slice(0, 80).toLocaleLowerCase('ru-RU');
+  const activeUsers = state.users.filter(person => !person.deleted_at && person.role !== 'deleted');
+  const studentsCount = activeUsers.filter(person => person.role === 'student').length;
+  const teachersCount = activeUsers.filter(person => person.role === 'teacher').length;
+  const blockedCount = activeUsers.filter(person => person.is_blocked).length;
+  const deletedCount = state.users.filter(person => person.deleted_at || person.role === 'deleted').length;
+
+  const visibleUsers = state.users
+    .filter(person => showDeleted
+      ? Boolean(person.deleted_at || person.role === 'deleted')
+      : !person.deleted_at && person.role !== 'deleted')
+    .filter(person => {
+      if (showDeleted || roleFilter === 'all') return true;
+      if (roleFilter === 'blocked') return Boolean(person.is_blocked);
+      return person.role === roleFilter;
+    })
+    .filter(person => {
+      if (!query) return true;
+      return [person.full_name, person.email, person.class_name]
+        .some(value => String(value || '').toLocaleLowerCase('ru-RU').includes(query));
+    })
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+  const roleNames = { student: 'Ученик', teacher: 'Учитель', admin: 'Администратор', deleted: 'Удалён' };
+  const cards = visibleUsers.map(person => {
+    const av = balance(person.id, 'available');
+    const held = balance(person.id, 'held');
+    const vrub = person.role === 'student' ? balance(person.id, 'vrub') : null;
+    const details = [
+      esc(person.email || ''),
+      roleNames[person.role] || 'Участник',
+      person.class_name ? 'Класс ' + esc(person.class_name) : '',
+      person.birth_date ? ageStatus(person.birth_date) : ''
+    ].filter(Boolean).join(' · ');
+    const status = person.deleted_at
+      ? '<span class="badge badge-muted">Удалён</span>'
+      : person.is_blocked
+        ? '<span class="badge badge-danger">Заблокирован</span>'
+        : '<span class="badge badge-success">Активен</span>';
+    let actions = '';
+    if (person.deleted_at || person.role === 'deleted') {
+      actions = '<p class="muted small mt-2">Профиль обезличен. Балансы, операции и история сделок сохранены для учёта.</p>';
+    } else if (person.role === 'admin') {
+      actions = '<p class="muted small mt-2">Права администратора меняются только через отдельную настройку доступа.</p>';
+    } else {
+      const roleForm =
+        '<form method="POST" action="/admin/role" class="admin-user-form">' +
+          '<input type="hidden" name="user_id" value="' + esc(person.id) + '">' +
+          '<label>Роль</label><select name="role">' +
+            '<option value="student"' + (person.role === 'student' ? ' selected' : '') + '>Ученик</option>' +
+            '<option value="teacher"' + (person.role === 'teacher' ? ' selected' : '') + '>Учитель</option>' +
+          '</select>' +
+          '<label>Класс для кабинета учителя</label><input name="class_name" maxlength="20" value="' + esc(person.class_name || '') + '" placeholder="Например, 8А">' +
+          '<button class="btn btn-primary btn-sm">Сохранить роль</button>' +
+        '</form>';
+      const blockForm =
+        '<form method="POST" action="/admin/block" class="admin-user-form">' +
+          '<input type="hidden" name="user_id" value="' + esc(person.id) + '">' +
+          '<input type="hidden" name="block" value="' + (person.is_blocked ? '0' : '1') + '">' +
+          '<label>' + (person.is_blocked ? 'Причина разблокировки' : 'Причина блокировки') + '</label>' +
+          '<input name="reason" maxlength="300" required placeholder="Коротко укажите причину">' +
+          '<button class="btn btn-ghost btn-sm">' + (person.is_blocked ? 'Разблокировать' : 'Заблокировать') + '</button>' +
+        '</form>';
+      const moneyForms = person.role === 'student'
+        ? '<div class="admin-user-form"><form method="POST" action="/admin/credit">' +
+            '<input type="hidden" name="user_id" value="' + esc(person.id) + '">' +
+            '<label>Начислить ScRl</label><input name="amount" type="number" min="1" max="1000000" required placeholder="Сумма">' +
+            '<input name="reason" maxlength="180" required placeholder="Причина">' +
+            '<button class="btn btn-primary btn-sm">Начислить</button></form>' +
+          '</div><div class="admin-user-form"><form method="POST" action="/admin/debit">' +
+            '<input type="hidden" name="user_id" value="' + esc(person.id) + '">' +
+            '<label>Списать ScRl</label><input name="amount" type="number" min="1" max="1000000" required placeholder="Сумма">' +
+            '<input name="reason" maxlength="180" required placeholder="Причина">' +
+            '<button class="btn btn-ghost btn-sm">Списать</button></form></div>'
+        : '';
+      const deleteForm =
+        '<details class="admin-delete"><summary>Удалить аккаунт</summary>' +
+          '<p class="muted small">Профиль и вход будут удалены. Активные объявления закроются. Финансовая история и данные завершённых сделок останутся в обезличенном виде.</p>' +
+          '<form method="POST" action="/admin/delete">' +
+            '<input type="hidden" name="user_id" value="' + esc(person.id) + '">' +
+            '<label>Причина удаления</label><input name="reason" maxlength="300" required placeholder="Укажите причину">' +
+            '<label>Для подтверждения введите УДАЛИТЬ</label><input name="confirmation" required autocomplete="off" placeholder="УДАЛИТЬ">' +
+            '<button class="btn btn-danger btn-sm">Удалить аккаунт</button>' +
+          '</form></details>';
+      actions = '<details class="admin-user-actions"><summary>Управление</summary><div class="admin-user-actions-body">' +
+        roleForm + blockForm + moneyForms + deleteForm + '</div></details>';
+    }
+    return '<article class="card admin-user-row">' +
+      '<div class="row-between admin-user-heading"><div><b>' + esc(person.full_name || 'Участник') + '</b>' +
+      '<div class="muted small">' + details + '</div></div>' +
+      '<div class="admin-user-balance"><b>' + money(av) + ' ScRl</b><div class="muted small">' +
+      money(held) + ' в резерве' + (vrub !== null ? ' · ' + money(vrub) + ' V-RUB' : '') + '</div></div></div>' +
+      '<div class="admin-user-meta">' + status +
+      (person.is_blocked && !person.deleted_at ? '<span class="muted small">Причина: ' + esc(person.block_reason || 'не указана') + '</span>' : '') +
+      '</div>' + actions + '</article>';
+  }).join('');
+
+  const queryValue = esc(url.searchParams.get('q') || '');
+  const tabs = showDeleted
+    ? '<a href="/admin/users">Назад к участникам</a>'
+    : '<nav class="admin-user-filters">' +
+      '<a href="/admin/users?role=all">Все (' + activeUsers.length + ')</a>' +
+      '<a href="/admin/users?role=student">Ученики (' + studentsCount + ')</a>' +
+      '<a href="/admin/users?role=teacher">Учителя (' + teachersCount + ')</a>' +
+      '<a href="/admin/users?role=blocked">Заблокированные (' + blockedCount + ')</a>' +
+      '<a href="/admin/users?show=deleted">Удалённые (' + deletedCount + ')</a>' +
+      '</nav>';
+  const auditLabels = {
+    user_role_changed: 'Изменение роли',
+    user_deleted: 'Удаление аккаунта',
+    user_blocked: 'Блокировка',
+    user_unblocked: 'Снятие блокировки',
+    student_credit_admin: 'Начисление ScRl',
+    student_debit_admin: 'Списание ScRl'
+  };
+  const history = (state.admin_audit_logs || []).slice().sort((a, b) =>
+    String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 20).map(entry => {
+      const actor = state.users.find(item => item.id === entry.actor_id);
+      const target = state.users.find(item => item.id === entry.target_id);
+      return '<tr><td>' + esc(entry.created_at ? new Date(entry.created_at).toLocaleString('ru-RU') : '') +
+        '</td><td>' + esc(auditLabels[entry.action] || 'Действие') +
+        '</td><td>' + esc(actor ? actor.full_name : 'Неизвестно') +
+        '</td><td>' + esc(target ? target.full_name : 'Удалённая запись') +
+        '</td><td>' + esc(entry.reason || '') + '</td></tr>';
+    }).join('');
+
+  sendHtml(res, layout('Пользователи', user,
+    flashBox(url) +
+    '<header class="admin-users-header"><div><h1>Участники</h1><p class="muted">Роли, классы и доступ к ScRl.</p></div>' +
+    '<a href="/admin" class="btn btn-ghost btn-sm">К экономике</a></header>' +
+    tabs +
+    (showDeleted ? '' :
+      '<form method="GET" action="/admin/users" class="admin-user-search">' +
+      '<input name="q" value="' + queryValue + '" maxlength="80" placeholder="Имя, email или класс">' +
+      '<input type="hidden" name="role" value="' + esc(roleFilter) + '">' +
+      '<button class="btn btn-primary btn-sm">Найти</button>' +
+      (queryValue ? '<a class="btn btn-ghost btn-sm" href="/admin/users?role=' + encodeURIComponent(roleFilter) + '">Сбросить</a>' : '') +
+      '</form>') +
+    '<p class="muted small">' + (showDeleted ? 'Архив удалённых аккаунтов: ' : 'Найдено: ') + visibleUsers.length + '</p>' +
+    (cards || '<p class="muted">Здесь пока нет пользователей.</p>') +
+    '<details class="admin-user-history"><summary>Последние действия администраторов</summary>' +
+    (history ? '<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Действие</th><th>Кто</th><th>Кому</th><th>Причина</th></tr></thead><tbody>' + history + '</tbody></table></div>' :
+      '<p class="muted small">Записей пока нет.</p>') +
+    '</details>'
+  ));
+}
 
 function handleCredit(res, admin, params) {
   if (admin.role !== 'admin') return redirect(res, '/');
@@ -343,4 +453,84 @@ function handleBlock(res, admin, params) {
 }
 
 
-module.exports = { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock };
+
+function handleRole(res, admin, params) {
+  if (admin.role !== 'admin') return redirect(res, '/');
+  const userId = params.get('user_id');
+  const target = state.users.find(item => item.id === userId);
+  if (!target || target.id === admin.id || target.role === 'admin') {
+    return redirect(res, '/admin/users?error=protected');
+  }
+  const nextRole = params.get('role');
+  const className = (params.get('class_name') || '').trim();
+  let result;
+  try {
+    result = changeUserRole(target, nextRole, className);
+  } catch (error) {
+    return redirect(res, '/admin/users?error=' + (error.code === 'teacher_class' ? 'teacher_class' : 'protected'));
+  }
+  const now = new Date().toISOString();
+  for (const [token, session] of sessions) {
+    const sessionUserId = typeof session === 'string' ? session : session && session.userId;
+    if (sessionUserId === target.id) sessions.delete(token);
+  }
+  state.admin_audit_logs.push({
+    id: crypto.randomUUID(), actor_id: admin.id, action: 'user_role_changed',
+    target_id: target.id, from_role: result.previousRole, to_role: result.role,
+    class_name: result.className, reason: 'Роль и класс изменены администратором', created_at: now
+  });
+  save();
+  return redirect(res, '/admin/users?msg=role_changed');
+}
+
+function handleDeleteUser(res, admin, params) {
+  if (admin.role !== 'admin') return redirect(res, '/');
+  const target = state.users.find(item => item.id === params.get('user_id'));
+  if (!target || target.id === admin.id || target.role === 'admin' || target.deleted_at) {
+    return redirect(res, '/admin/users?error=protected');
+  }
+  const reason = (params.get('reason') || '').trim().slice(0, 300);
+  if (!reason) return redirect(res, '/admin/users?error=fields');
+  if (params.get('confirmation') !== 'УДАЛИТЬ') {
+    return redirect(res, '/admin/users?error=confirmation');
+  }
+
+  const now = new Date().toISOString();
+  try {
+    anonymizeUser(target, {
+      actorId: admin.id,
+      reason,
+      now,
+      passwordHash: hashPassword(crypto.randomBytes(48).toString('hex'))
+    });
+  } catch (error) {
+    return redirect(res, '/admin/users?error=protected');
+  }
+
+  for (const [token, session] of sessions) {
+    const sessionUserId = typeof session === 'string' ? session : session && session.userId;
+    if (sessionUserId === target.id) sessions.delete(token);
+  }
+  for (const post of [...(state.demand_posts || []), ...(state.offer_posts || [])]) {
+    if (post.user_id === target.id && ['active', 'pending'].includes(post.status)) {
+      post.status = 'removed';
+      post.removed_at = now;
+      post.removed_by = admin.id;
+    }
+  }
+  for (const listing of (state.listings || [])) {
+    if (listing.seller_id === target.id && ['active', 'pending'].includes(listing.status)) {
+      listing.status = 'removed';
+      listing.removed_at = now;
+      listing.removed_by = admin.id;
+    }
+  }
+  state.admin_audit_logs.push({
+    id: crypto.randomUUID(), actor_id: admin.id, action: 'user_deleted',
+    target_id: target.id, reason, created_at: now
+  });
+  save();
+  return redirect(res, '/admin/users?msg=user_deleted');
+}
+
+module.exports = { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock, handleRole, handleDeleteUser };
