@@ -48,4 +48,16 @@ function anonymizeUser(target, details) {
   return target;
 }
 
-module.exports = { changeUserRole, anonymizeUser };
+function hasOpenActivities(userId, deals = [], orders = []) {
+  const openDeal = deals.some(deal =>
+    [deal.buyer_id, deal.seller_id].includes(userId) &&
+    ['accepted', 'in_progress', 'awaiting_confirmation', 'disputed'].includes(deal.status)
+  );
+  const openOrder = orders.some(order =>
+    [order.buyer_id, order.seller_id].includes(userId) &&
+    ['awaiting_delivery', 'awaiting_confirmation', 'disputed'].includes(order.status)
+  );
+  return openDeal || openOrder;
+}
+
+module.exports = { changeUserRole, anonymizeUser, hasOpenActivities };
