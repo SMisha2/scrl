@@ -138,16 +138,17 @@ function pageAdminUsers(res, user, url) {
           <input name="reason" required placeholder="причина" style="width:140px;margin:0">
           <button class="btn btn-danger btn-sm">Списать</button>
         </form>
-        <form method="POST" action="/admin/block">
+        <form method="POST" action="/admin/block" class="row">
           <input type="hidden" name="user_id" value="${u.id}">
           <input type="hidden" name="block" value="${u.is_blocked ? '0' : '1'}">
+          <input name="reason" maxlength="300" required placeholder="${u.is_blocked ? 'Причина разблокировки' : 'Причина блокировки'}" style="width:190px;margin:0">
           <button class="btn btn-ghost btn-sm">${u.is_blocked ? 'Разблокировать' : 'Заблокировать'}</button>
         </form>
       </div>` : '';
     return `<div class="card">
       <div class="row-between">
         <div><b>${esc(u.full_name)}</b>
-          <div class="muted small">${esc(u.email)} · ${u.role}${u.birth_date ? ' · ' + ageStatus(u.birth_date) : ''}${u.class_name ? ' · ' + esc(u.class_name) : ''}${u.is_blocked ? ' · <span class="badge badge-danger">Заблокирован</span>' : ''}</div>
+          <div class="muted small">${esc(u.email)} · ${u.role}${u.birth_date ? ' · ' + ageStatus(u.birth_date) : ''}${u.class_name ? ' · ' + esc(u.class_name) : ''}${u.is_blocked ? ' · <span class="badge badge-danger">Заблокирован</span> · Причина: ' + esc(u.block_reason || 'Не указана') : ''}</div>
         </div>
         <div style="text-align:right"><div><b>${av}</b> ScRl</div>
           <div class="muted small">${hd} в escrow${vr !== null ? ' · ' + vr + ' vrub' : ''}</div></div>
@@ -229,24 +230,36 @@ function handleDebit(res, admin, params) {
 function handleBlock(res, admin, params) {
   if (admin.role !== 'admin') return redirect(res, '/');
   const userId = params.get('user_id');
-  const user = state.users.find(item => item.id === userId);
-  if (!user) return redirect(res, '/admin/users?error=notfound');
-  if (user.id === admin.id || user.role === 'admin') return redirect(res, '/admin/users?error=bad');
+  const target = state.users.find(item => item.id === userId);
+  if (!target) return redirect(res, '/admin/users?error=notfound');
+  if (target.id === admin.id || target.role === 'admin') return redirect(res, '/admin/users?error=bad');
+
+  const reason = (params.get('reason') || '').trim().slice(0, 300);
+  if (!reason) return redirect(res, '/admin/users?error=fields');
+
   const block = params.get('block') === '1';
-  user.is_blocked = block;
-  user.blocked_by = block ? admin.id : null;
-  user.blocked_at = block ? new Date().toISOString() : null;
+  const now = new Date().toISOString();
+  target.is_blocked = block;
+  if (block) {
+    target.blocked_by = admin.id;
+    target.blocked_at = now;
+    target.block_reason = reason;
+  } else {
+    target.unblocked_by = admin.id;
+    target.unblocked_at = now;
+    target.unblock_reason = reason;
+    target.blocked_by = null;
+    target.blocked_at = null;
+    target.block_reason = null;
+  }
   state.admin_audit_logs.push({
     id: crypto.randomUUID(), actor_id: admin.id,
     action: block ? 'user_blocked' : 'user_unblocked',
-    target_id: user.id, reason: 'Изменение статуса аккаунта модератором',
-    created_at: new Date().toISOString()
+    target_id: target.id, reason, created_at: now
   });
   save();
   return redirect(res, '/admin/users?msg=' + (block ? 'blocked' : 'unblocked'));
 }
-
-
 
 
 module.exports = { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock };
