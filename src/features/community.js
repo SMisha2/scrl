@@ -7,6 +7,21 @@ const { layout } = require('../views/layout');
 const { notify, unreadCount } = require('../utils/notifications');
 const { analyseText } = require('../services/moderation-rules');
 
+function dealLedgerState(deal) {
+  const held = state.accounts.find(item => item.user_id === deal.buyer_id && item.kind === 'held');
+  if (!held) return { escrow: 0, settlement: null, held: null };
+  const txs = state.transactions.filter(tx => tx.payload && tx.payload.dealId === deal.id);
+  const ids = new Set(txs.map(tx => tx.id));
+  const escrow = state.entries
+    .filter(entry => ids.has(entry.tx_id) && entry.account_id === held.id)
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const settlement = txs.find(tx => [
+    'deal_settlement', 'deal_escrow_refund',
+    'deal_dispute_refund', 'deal_dispute_release'
+  ].includes(tx.kind)) || null;
+  return { escrow, settlement, held };
+}
+
 const PRICE_MODES = {
   fixed: 'Фиксированная цена',
   range: 'Диапазон цены',
@@ -292,15 +307,37 @@ function handleDealDeliver(res, user, params) {
 function handleDealConfirm(res, user, params) {
   const deal = state.deals.find(d => d.id === params.get('deal_id'));
   if (!deal || deal.buyer_id !== user.id || deal.status !== 'awaiting_confirmation') return redirect(res, '/deals?error=bad');
-  if (deal.price > 0) {
-    const commission = Math.floor(deal.price * deal.commission_percent / 100);
-    const sellerAmount = deal.price - commission;
-    const entries = [
-      { accountId: account(deal.buyer_id, 'held').id, amount: -deal.price, note: 'Завершение сделки' },
-      { accountId: account(deal.seller_id, 'available').id, amount: sellerAmount, note: 'Оплата по сделке' }
-    ];
-    if (commission > 0) entries.push({ accountId: systemAccount('burn').id, amount: commission, note: 'Комиссия платформы' });
-    recordTx('deal_settlement', user.id, { dealId: deal.id, price: deal.price, commission }, entries);
+  const ledger = dealLedgerState(deal);
+  const price = Number(deal.price || 0);
+  if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/deals?error=bad');
+  if (price > 0) {
+    if (ledger.settlement) {
+      if (!['deal_settlement', 'deal_dispute_release'].includes(ledger.settlement.kind)) {
+        return redirect(res, '/deals?error=already_settled');
+      }
+    } else {
+      if (!ledger.held || ledger.escrow !== price || ledger.held.balance < price) {
+        return redirect(res, '/deals?error=escrow');
+      }
+      const commissionPercent = Math.min(100, Math.max(0, Number(deal.commission_percent) || 0));
+      const commission = Math.floor(price * commissionPercent / 100);
+      const sellerAmount = price - commission;
+      const entries = [
+        { accountId: ledger.held.id, amount: -price, note: 'Завершение сделки' },
+        { accountId: account(deal.seller_id, 'available').id, amount: sellerAmount, note: 'Оплата по сделке' }
+      ];
+      if (commission > 0) {
+        const burn = systemAccount('burn');
+        if (!burn) return redirect(res, '/deals?error=ledger');
+        entries.push({ accountId: burn.id, amount: commission, note: 'Комиссия платформы' });
+      }
+      try {
+        recordTx('deal_settlement', user.id, { dealId: deal.id, price, commission }, entries);
+      } catch (error) {
+        console.error('Deal settlement failed:', error.message);
+        return redirect(res, '/deals?error=settlement');
+      }
+    }
   }
   deal.status = 'completed';
   deal.completed_at = new Date().toISOString();
@@ -316,11 +353,25 @@ function handleDealCancel(res, user, params) {
   const deal = state.deals.find(d => d.id === params.get('deal_id'));
   if (!deal || ![deal.buyer_id, deal.seller_id].includes(user.id) ||
       !['accepted', 'in_progress'].includes(deal.status)) return redirect(res, '/deals?error=bad');
-  if (deal.price > 0) {
-    recordTx('deal_escrow_refund', user.id, { dealId: deal.id, amount: deal.price }, [
-      { accountId: account(deal.buyer_id, 'held').id, amount: -deal.price, note: 'Отмена до выполнения' },
-      { accountId: account(deal.buyer_id, 'available').id, amount: deal.price, note: 'Возврат escrow' }
-    ]);
+  const ledger = dealLedgerState(deal);
+  const price = Number(deal.price || 0);
+  if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/deals?error=bad');
+  if (ledger.settlement && ledger.settlement.kind !== 'deal_escrow_refund') {
+    return redirect(res, '/deals?error=already_settled');
+  }
+  if (price > 0 && !ledger.settlement) {
+    if (!ledger.held || ledger.escrow !== price || ledger.held.balance < price) {
+      return redirect(res, '/deals?error=escrow');
+    }
+    try {
+      recordTx('deal_escrow_refund', user.id, { dealId: deal.id, amount: price }, [
+        { accountId: ledger.held.id, amount: -price, note: 'Отмена до выполнения' },
+        { accountId: account(deal.buyer_id, 'available').id, amount: price, note: 'Возврат escrow' }
+      ]);
+    } catch (error) {
+      console.error('Deal cancellation refund failed:', error.message);
+      return redirect(res, '/deals?error=refund');
+    }
   }
   deal.status = 'cancelled';
   deal.cancelled_at = new Date().toISOString();
