@@ -95,10 +95,14 @@ function pageModeration(res, user, url) {
         ? '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="approve"><button class="btn btn-primary btn-sm">Одобрить</button></form>' +
           '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="reject"><button class="btn btn-danger btn-sm">Отклонить</button></form>'
         : '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="close_stale"><button class="btn btn-ghost btn-sm">Закрыть устаревшую проверку</button></form>';
-    } else if (item.kind === 'market_order' && order?.status === 'disputed') {
-      const paid = Number(order.price || 0) > 0;
-      buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl покупателю' : 'Закрыть заказ с возвратом') + '</button></form>' +
-        '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="release_seller"><button class="btn btn-primary btn-sm">' + (paid ? 'Завершить в пользу продавца' : 'Завершить заказ') + '</button></form>';
+    } else if (item.kind === 'market_order') {
+      if (order?.status === 'disputed') {
+        const paid = Number(order.price || 0) > 0;
+        buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl покупателю' : 'Закрыть заказ с возвратом') + '</button></form>' +
+          '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="release_seller"><button class="btn btn-primary btn-sm">' + (paid ? 'Завершить в пользу продавца' : 'Завершить заказ') + '</button></form>';
+      } else {
+        buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="close_stale"><button class="btn btn-ghost btn-sm">Закрыть устаревший спор</button></form>';
+      }
     } else if (item.kind === 'deal' && deal?.status === 'disputed') {
       const paid = Number(deal.price || 0) > 0;
       buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl заказчику' : 'Отменить сделку') + '</button></form>' +
@@ -318,8 +322,12 @@ function handleModerationAction(res, user, params) {
     );
   } else if (item.kind === 'market_order') {
     const order = state.orders.find(entry => entry.id === item.target_id);
-    if (!order || order.status !== 'disputed') return redirect(res, '/admin/moderation?error=deal_state');
-    if (!['refund_buyer', 'release_seller'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
+    if (decision === 'close_stale') {
+      if (order?.status === 'disputed') return redirect(res, '/admin/moderation?error=decision');
+      item.decision = 'closed_stale';
+    } else {
+      if (!order || order.status !== 'disputed') return redirect(res, '/admin/moderation?error=deal_state');
+      if (!['refund_buyer', 'release_seller'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
 
     const price = Number(order.price || 0);
     if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/admin/moderation?error=deal_amount');
@@ -374,6 +382,7 @@ function handleModerationAction(res, user, params) {
         body: decision === 'refund_buyer' ? 'Заказ отменён после рассмотрения спора.' : 'Администратор подтвердил завершение заказа.',
         href: '/orders' }
     );
+    }
   } else {
     return redirect(res, '/admin/moderation?error=case_kind');
   }
