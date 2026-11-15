@@ -297,6 +297,110 @@ th{letter-spacing:.07em}
 ::selection{background:var(--accent-soft);color:var(--text)}
 .board-post>p a,.card p a{text-decoration:underline;text-underline-offset:3px}
 :root[data-theme="dark"] .amount-positive{color:#9dc4a9!important}
+
+/* Responsive shell: wide workspace on desktop, compact touch layout on phones. */
+html,body{min-height:100%;overflow-x:clip}
+body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+.header{flex:0 0 auto;position:sticky;top:0;z-index:70}
+.container{width:100%;max-width:none;margin-left:auto;margin-right:auto;padding-left:clamp(20px,3vw,58px);padding-right:clamp(20px,3vw,58px)}
+.header-inner{min-height:66px;gap:10px 22px;padding-top:8px;padding-bottom:8px;flex-wrap:wrap}
+.nav{flex:1 1 560px;flex-wrap:wrap;overflow:visible;gap:2px clamp(10px,1.25vw,20px)}
+.nav a{min-height:40px}
+.header-right{margin-left:auto}
+main.container{flex:1 0 auto;width:100%;min-height:calc(100vh - 145px);min-height:calc(100dvh - 145px);padding-top:clamp(28px,3vw,46px);padding-bottom:clamp(48px,5vw,76px)}
+.site-footer{flex:0 0 auto;padding-top:14px;padding-bottom:22px;border-top:1px solid var(--border);color:var(--muted);font-size:11px}
+.mobile-nav-primary{display:contents}
+.mobile-more{display:none}
+@media(max-width:1100px) and (min-width:761px){
+  .container{padding-left:24px;padding-right:24px}
+  .header-inner{gap:8px 14px}
+  .nav{flex-basis:500px;gap:2px 11px}
+  .nav a{font-size:12px}
+  .header-balance{gap:6px}
+}
+@media(max-width:760px){
+  html,body{width:100%;overflow-x:clip}
+  .container{padding-left:16px;padding-right:16px}
+  .header{padding-top:env(safe-area-inset-top)}
+  .header-inner{min-height:58px;gap:8px;padding-top:5px;padding-bottom:5px}
+  .logo{font-size:19px}
+  .header-right{gap:6px}
+  .header-balance{gap:5px}
+  .header-balance-item{gap:3px}
+  .header-balance-item b{font-size:11px}
+  .header-balance-item small{font-size:8px}
+  .notification-link{width:40px;height:42px}
+  .theme-toggle{width:40px;min-width:40px;min-height:40px;padding:0;border:0;font-size:0}
+  .theme-toggle:after{content:"◐";font-size:17px}
+  .header-right>.btn{min-height:40px;padding:6px 9px}
+  main.container{min-height:calc(100dvh - 135px);padding-top:22px;padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+  h1{font-size:clamp(25px,7vw,30px);line-height:1.16}
+  h2{font-size:18px}
+  p{overflow-wrap:anywhere}
+  .card{margin-bottom:18px;padding:15px 0}
+  .grid{gap:12px}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .home-balances{align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .home-balance strong{font-size:clamp(20px,6vw,25px)}
+  .home-balance-secondary strong{font-size:18px}
+  .home-actions{gap:10px 16px;flex-wrap:wrap;margin-bottom:22px}
+  .home-actions a{display:inline-flex;align-items:center;min-height:42px}
+  .home-sections{grid-template-columns:minmax(0,1fr);gap:24px}
+  .board-toolbar{align-items:stretch;gap:8px}
+  .board-toolbar form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+  .board-toolbar input{grid-column:1/-1;width:100%;min-width:0}
+  .board-toolbar select{width:100%;min-width:0}
+  .board-toolbar button,.board-toolbar a{display:inline-flex;justify-content:center;align-items:center;min-height:42px}
+  .compose-panel>summary{min-height:48px;gap:8px}
+  .compose-subtitle{margin-left:auto;text-align:right}
+  .compose-body>.card{max-width:none}
+  .board-post{padding:16px 0}
+  .board-post .post-meta{flex-wrap:wrap;gap:6px}
+  .board-post .post-footer{align-items:stretch!important;flex-direction:column;gap:10px}
+  .board-post .post-actions{width:100%;gap:8px 14px}
+  .suggestion-row{align-items:stretch;flex-direction:column;gap:8px}
+  .suggestion-row .respond-form,.respond-form{width:100%;min-width:0;max-width:none}
+  .respond-panel>summary,.report-panel>summary{display:inline-flex;align-items:center;min-height:42px}
+  .btn{min-height:44px;padding:9px 14px}
+  .btn-sm{min-height:40px;padding:7px 11px;font-size:12px}
+  .btn-block{min-height:46px}
+  input,select,textarea{min-height:44px;margin:6px 0 14px;padding:10px 12px;font-size:16px}
+  textarea{min-height:104px}
+  label{font-size:13px}
+  .row{gap:8px}
+  .row>.btn,.row>form>.btn{flex:1 1 auto}
+  .admin-users-header{align-items:flex-start;flex-direction:column;gap:8px}
+  .admin-user-search{width:100%;max-width:none;align-items:stretch;flex-wrap:wrap}
+  .admin-user-search input{flex-basis:100%}
+  .admin-user-heading{align-items:flex-start;flex-direction:column;gap:8px}
+  .admin-user-balance{text-align:left}
+  .admin-user-filters{gap:8px 14px}
+  .economy-overview{grid-template-columns:minmax(0,1fr);gap:18px}
+  .economy-activity{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .economy-storage{align-items:stretch;flex-direction:column;gap:12px}
+  table{display:block;width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+  th,td{white-space:nowrap}
+  .mobile-nav{display:flex;align-items:stretch;position:fixed;left:0;right:0;bottom:0;z-index:90;width:100%;gap:4px;overflow:visible;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -3px 16px rgba(30,40,34,.06)}
+  .mobile-nav-primary{display:flex;flex:1 1 auto;align-items:stretch;min-width:0;gap:3px}
+  .mobile-nav-primary>a,.mobile-more>summary{display:flex;align-items:center;justify-content:center;flex:1 1 0;min-width:0;min-height:48px;padding:6px 3px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.2;text-align:center;white-space:normal;overflow-wrap:anywhere;text-decoration:none!important;cursor:pointer}
+  .mobile-nav-primary>a:hover,.mobile-more>summary:hover{color:var(--text)}
+  .mobile-more{display:block;position:relative;flex:0 0 54px;min-width:54px}
+  .mobile-more>summary{width:100%;list-style:none;color:var(--accent)}
+  .mobile-more>summary::-webkit-details-marker{display:none}
+  .mobile-more-panel{position:absolute;right:0;bottom:calc(100% + 9px);display:grid;gap:0;width:min(300px,calc(100vw - 24px));max-height:min(65dvh,520px);overflow:auto;padding:6px 12px;background:var(--surface);border:1px solid var(--border);overscroll-behavior:contain}
+  .mobile-more-panel a{display:flex;align-items:center;min-height:48px;padding:10px 4px;border-bottom:1px solid var(--border);color:var(--text);font-size:14px;font-weight:550;text-decoration:none}
+  .mobile-more-panel a:last-child{border-bottom:0}
+  .site-footer{padding-bottom:calc(14px + env(safe-area-inset-bottom));font-size:10px}
+}
+@media(max-width:420px){
+  .container{padding-left:13px;padding-right:13px}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:minmax(0,1fr)}
+  .home-balances{gap:10px}
+  .mobile-nav-primary>a,.mobile-more>summary{font-size:10px;padding-left:1px;padding-right:1px}
+  .mobile-more{flex-basis:48px;min-width:48px}
+  .header-balance-item small{display:none}
+  .header-balance{gap:6px}
+}
 `;
 
 
@@ -320,16 +424,44 @@ function autoRefreshScript() {
 
 
 function layout(title, user, content) {
-  const navItems = !user ? '' : `
-    ${user.role === 'student' ? `
-      <a href="/app">Главная</a><a href="/board">Доска помощи</a>
-      <a href="/activity">Мои дела</a><a href="/wallet">Кошелёк</a>
-    ` : ''}
-    ${user.role === 'teacher' ? `<a href="/teacher">Кабинет</a><a href="/teacher/impact">Пульс класса</a><a href="/auctions">Аукционы</a>` : ''}
-    ${user.role === 'admin' ? `<a href="/admin">Монитор</a><a href="/admin/users">Пользователи</a><a href="/admin/impact">Пульс лицея</a><a href="/admin/market">Курс ScRl</a><a href="/auctions">Аукционы</a><a href="/admin/moderation">Модерация</a><a href="/admin/ai">AI-помощник</a><a href="/admin/financial">Финансы</a>` : ''}
-  `;
-  const nav = navItems ? `<nav class="nav" aria-label="Основная навигация">${navItems}</nav>` : '';
-  const mobileNav = navItems ? `<nav class="mobile-nav" aria-label="Мобильная навигация">${navItems}</nav>` : '';
+  const navLinks = !user ? [] : ({
+    student: [
+      { href: '/app', label: 'Главная' },
+      { href: '/board', label: 'Доска помощи' },
+      { href: '/activity', label: 'Мои дела' },
+      { href: '/wallet', label: 'Кошелёк' }
+    ],
+    teacher: [
+      { href: '/teacher', label: 'Кабинет' },
+      { href: '/teacher/impact', label: 'Пульс класса' },
+      { href: '/auctions', label: 'Аукционы' }
+    ],
+    admin: [
+      { href: '/admin', label: 'Монитор' },
+      { href: '/admin/users', label: 'Пользователи' },
+      { href: '/admin/impact', label: 'Пульс лицея' },
+      { href: '/admin/market', label: 'Курс ScRl' },
+      { href: '/auctions', label: 'Аукционы' },
+      { href: '/admin/moderation', label: 'Модерация' },
+      { href: '/admin/ai', label: 'AI-помощник' },
+      { href: '/admin/financial', label: 'Финансы' }
+    ]
+  }[user.role] || []);
+  const renderNavLink = item => `<a href="${item.href}">${item.label}</a>`;
+  const nav = navLinks.length
+    ? `<nav class="nav" aria-label="Основная навигация">${navLinks.map(renderNavLink).join('')}</nav>`
+    : '';
+  const mobilePrimary = navLinks.length > 4 ? navLinks.slice(0, 3) : navLinks;
+  const mobileSecondary = navLinks.length > 4 ? navLinks.slice(3) : [];
+  const mobileNav = navLinks.length
+    ? `<nav class="mobile-nav" aria-label="Мобильная навигация">
+        <div class="mobile-nav-primary">${mobilePrimary.map(renderNavLink).join('')}</div>
+        ${mobileSecondary.length ? `<details class="mobile-more">
+          <summary aria-label="Открыть остальные разделы">Ещё</summary>
+          <div class="mobile-more-panel">${mobileSecondary.map(renderNavLink).join('')}</div>
+        </details>` : ''}
+      </nav>`
+    : '';
   const badge = user && user.role === 'student'
     ? `<a class="header-balance" href="/wallet" title="Открыть кошелёк: доступные балансы">
         <span class="header-balance-item"><small>ScRl</small><b>${balance(user.id, 'available').toLocaleString('ru-RU')}</b></span>
@@ -356,7 +488,7 @@ function layout(title, user, content) {
 <title>${esc(title)} · ScRl</title><style>${CSS}</style></head>
 <body><header class="header"><div class="container header-inner">
 <a href="/" class="logo"><span class="coin">S</span>ScRl</a>${nav}${right}
-</div></header><main class="container">${content}</main><footer class="container" style="padding-top:14px;padding-bottom:24px;border-top:1px solid var(--border);color:var(--muted);font-size:11px">ScRl · проект учеников Республиканского лицея</footer>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
+</div></header><main class="container">${content}</main><footer class="container site-footer">ScRl - проект учеников РЛИ 9кл</footer>${mobileNav}${autoRefreshScript()}${themeScript()}</body></html>`;
 }
 
 function themeScript() {
