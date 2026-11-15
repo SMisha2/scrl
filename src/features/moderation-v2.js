@@ -14,6 +14,23 @@ function audit(admin, action, targetId, reason) {
   });
 }
 
+function orderLedgerState(order) {
+  const held = state.accounts.find(item => item.user_id === order.buyer_id && item.kind === 'held');
+  if (!held) return { escrow: 0, settlement: null, held: null, decision: null };
+  const txs = state.transactions.filter(tx => tx.payload && tx.payload.orderId === order.id);
+  const ids = new Set(txs.map(tx => tx.id));
+  const escrow = state.entries
+    .filter(entry => ids.has(entry.tx_id) && entry.account_id === held.id)
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const settlement = txs.find(tx => [
+    'order_settle', 'order_dispute_refund', 'order_dispute_release'
+  ].includes(tx.kind)) || null;
+  const decision = settlement
+    ? (settlement.kind === 'order_settle' || settlement.kind === 'order_dispute_release' ? 'release_seller' : 'refund_buyer')
+    : null;
+  return { escrow, settlement, held, decision };
+}
+
 function dealLedgerState(deal) {
   const held = state.accounts.find(item => item.user_id === deal.buyer_id && item.kind === 'held');
   if (!held) return { escrow: 0, settlement: null };
@@ -52,11 +69,13 @@ function reportMeta(report) {
 function pageModeration(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
   const query = (url.searchParams.get('q') || '').trim().toLowerCase().slice(0, 100);
-  const cases = state.moderation_cases.filter(item => item.status === 'open' && ['post', 'deal', 'listing'].includes(item.kind)).filter(item => {
+  const cases = state.moderation_cases.filter(item => item.status === 'open' && ['post', 'deal', 'listing', 'market_order'].includes(item.kind)).filter(item => {
     const post = item.kind === 'post' ? findPost(item.post_kind, item.target_id) : null;
     const deal = item.kind === 'deal' ? state.deals.find(x => x.id === item.target_id) : null;
     const listing = item.kind === 'listing' ? state.listings.find(x => x.id === item.target_id) : null;
-    return !query || [item.reason, item.recommendation, post?.title, post?.description, listing?.title, listing?.description, deal?.dispute_reason, deal?.id]
+    const order = item.kind === 'market_order' ? state.orders.find(x => x.id === item.target_id) : null;
+    const orderListing = order ? state.listings.find(x => x.id === order.listing_id) : null;
+    return !query || [item.reason, item.recommendation, post?.title, post?.description, listing?.title, listing?.description, deal?.dispute_reason, deal?.id, order?.dispute_reason, orderListing?.title]
       .filter(Boolean).join(' ').toLowerCase().includes(query);
   }).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
@@ -64,9 +83,11 @@ function pageModeration(res, user, url) {
     const post = item.kind === 'post' ? findPost(item.post_kind, item.target_id) : null;
     const deal = item.kind === 'deal' ? state.deals.find(x => x.id === item.target_id) : null;
     const listing = item.kind === 'listing' ? state.listings.find(x => x.id === item.target_id) : null;
+    const order = item.kind === 'market_order' ? state.orders.find(x => x.id === item.target_id) : null;
+    const orderListing = order ? state.listings.find(x => x.id === order.listing_id) : null;
     const author = post ? state.users.find(x => x.id === post.user_id) : listing ? state.users.find(x => x.id === listing.seller_id) : null;
-    const buyer = deal ? state.users.find(x => x.id === deal.buyer_id) : null;
-    const seller = deal ? state.users.find(x => x.id === deal.seller_id) : null;
+    const buyer = deal ? state.users.find(x => x.id === deal.buyer_id) : order ? state.users.find(x => x.id === order.buyer_id) : null;
+    const seller = deal ? state.users.find(x => x.id === deal.seller_id) : order ? state.users.find(x => x.id === order.seller_id) : null;
     let buttons = '';
     if (item.kind === 'post' || item.kind === 'listing') {
       const target = post || listing;
@@ -74,6 +95,10 @@ function pageModeration(res, user, url) {
         ? '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="approve"><button class="btn btn-primary btn-sm">Одобрить</button></form>' +
           '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="reject"><button class="btn btn-danger btn-sm">Отклонить</button></form>'
         : '<span class="badge badge-muted">Объект уже изменён — действие недоступно</span>';
+    } else if (item.kind === 'market_order' && order?.status === 'disputed') {
+      const paid = Number(order.price || 0) > 0;
+      buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl покупателю' : 'Закрыть заказ с возвратом') + '</button></form>' +
+        '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="release_seller"><button class="btn btn-primary btn-sm">' + (paid ? 'Завершить в пользу продавца' : 'Завершить заказ') + '</button></form>';
     } else if (item.kind === 'deal' && deal?.status === 'disputed') {
       const paid = Number(deal.price || 0) > 0;
       buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl заказчику' : 'Отменить сделку') + '</button></form>' +
@@ -81,12 +106,13 @@ function pageModeration(res, user, url) {
     } else {
       buttons = '<span class="badge badge-muted">Объект уже изменён — проверьте журнал</span>';
     }
-    const title = post?.title || listing?.title || (deal ? 'Спор по сделке' : 'Объект не найден');
-    const body = post?.description || listing?.description || deal?.dispute_reason || item.reason || 'Нет подробностей';
+    const title = post?.title || listing?.title || orderListing?.title || (deal ? 'Спор по сделке' : order ? 'Спор по заказу Marketplace' : 'Объект не найден');
+    const body = post?.description || listing?.description || deal?.dispute_reason || order?.dispute_reason || item.reason || 'Нет подробностей';
     return '<article class="card"><div class="row-between"><div><span class="badge badge-accent">' + esc(item.kind) + '</span> <span class="badge badge-muted">' + esc(post?.moderation_level || listing?.moderation_level || 'ручная проверка') + '</span></div><span class="muted small">' + esc(item.created_at || '') + '</span></div>' +
       '<h2 class="mt-1">' + esc(title) + '</h2>' +
       (author ? '<p class="muted small">Автор: ' + esc(author.full_name) + '</p>' : '') +
       (deal ? '<p class="muted small">Заказчик: ' + esc(buyer?.full_name || '—') + ' · Исполнитель: ' + esc(seller?.full_name || '—') + ' · Цена: ' + Number(deal.price || 0).toLocaleString('ru-RU') + ' ScRl · Escrow: ' + balance(deal.buyer_id, 'held').toLocaleString('ru-RU') + ' ScRl</p>' : '') +
+      (order ? '<p class="muted small">Покупатель: ' + esc(buyer?.full_name || '—') + ' · Продавец: ' + esc(seller?.full_name || '—') + ' · Цена: ' + Number(order.price || 0).toLocaleString('ru-RU') + ' ScRl · Резерв по заказу: ' + orderLedgerState(order).escrow.toLocaleString('ru-RU') + ' ScRl</p>' : '') +
       '<p class="mt-1">' + esc(body) + '</p><p class="muted small mt-1">Основание: ' + esc(item.reason || 'Ручная проверка') + '</p>' +
       (Array.isArray(post?.moderation_findings || listing?.moderation_findings) && (post?.moderation_findings || listing?.moderation_findings).length ? '<p class="small">Совпадения: ' + esc((post?.moderation_findings || listing?.moderation_findings).map(x => x.label).join('; ')) + '</p>' : '') +
       (item.recommendation ? '<p class="small muted">' + esc(item.recommendation) + '</p>' : '') +
@@ -283,6 +309,64 @@ function handleModerationAction(res, user, params) {
     messages.push(
       { id: deal.buyer_id, title: 'Спор по сделке рассмотрен', body: decision === 'refund_buyer' ? 'Сделка отменена, зарезервированные ScRl возвращены.' : 'Администратор подтвердил завершение сделки.', href: '/deals' },
       { id: deal.seller_id, title: 'Спор по сделке рассмотрен', body: decision === 'refund_buyer' ? 'Сделка отменена после рассмотрения спора.' : 'Администратор подтвердил оплату по сделке.', href: '/deals' }
+    );
+  } else if (item.kind === 'market_order') {
+    const order = state.orders.find(entry => entry.id === item.target_id);
+    if (!order || order.status !== 'disputed') return redirect(res, '/admin/moderation?error=order_state');
+    if (!['refund_buyer', 'release_seller'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
+
+    const price = Number(order.price || 0);
+    if (!Number.isSafeInteger(price) || price < 0) return redirect(res, '/admin/moderation?error=order_amount');
+    const ledger = orderLedgerState(order);
+    if (ledger.settlement && ledger.decision !== decision) return redirect(res, '/admin/moderation?error=already_settled');
+
+    if (price > 0 && !ledger.settlement) {
+      if (!ledger.held || ledger.escrow !== price || ledger.held.balance < price) {
+        return redirect(res, '/admin/moderation?error=escrow_mismatch');
+      }
+      try {
+        if (decision === 'refund_buyer') {
+          recordTx('order_dispute_refund', user.id, { orderId: order.id, amount: price, decision }, [
+            { accountId: ledger.held.id, amount: -price, note: 'Возврат escrow после рассмотрения спора' },
+            { accountId: account(order.buyer_id, 'available').id, amount: price, note: 'Возврат покупателю после спора' }
+          ]);
+        } else {
+          const commission = Math.min(price, Math.max(0, Number.isSafeInteger(order.commission) ? order.commission : Math.floor(price * 0.1)));
+          const sellerAmount = price - commission;
+          const entries = [
+            { accountId: ledger.held.id, amount: -price, note: 'Разрешение спора в пользу продавца' },
+            { accountId: account(order.seller_id, 'available').id, amount: sellerAmount, note: 'Оплата продавцу после спора' }
+          ];
+          if (commission > 0) {
+            const burn = systemAccount('burn');
+            if (!burn) return redirect(res, '/admin/moderation?error=ledger');
+            entries.push({ accountId: burn.id, amount: commission, note: 'Комиссия Marketplace' });
+          }
+          recordTx('order_dispute_release', user.id, { orderId: order.id, amount: price, commission, decision }, entries);
+        }
+      } catch (error) {
+        console.error('Marketplace dispute settlement failed:', error.message);
+        return redirect(res, '/admin/moderation?error=settlement');
+      }
+    }
+
+    order.status = decision === 'refund_buyer' ? 'refunded' : 'completed';
+    order.dispute_resolution = decision === 'refund_buyer' ? 'refunded_to_buyer' : 'released_to_seller';
+    order.dispute_resolved_by = user.id;
+    order.dispute_resolved_at = now;
+    const listing = state.listings.find(entry => entry.id === order.listing_id);
+    if (listing) {
+      listing.status = decision === 'refund_buyer' ? 'active' : 'completed';
+      listing.updated_at = now;
+    }
+    item.decision = decision;
+    messages.push(
+      { id: order.buyer_id, title: 'Спор по заказу рассмотрен',
+        body: decision === 'refund_buyer' ? 'Заказ отменён, зарезервированные ScRl возвращены.' : 'Администратор подтвердил выполнение заказа и выплату продавцу.',
+        href: '/orders' },
+      { id: order.seller_id, title: 'Спор по заказу рассмотрен',
+        body: decision === 'refund_buyer' ? 'Заказ отменён после рассмотрения спора.' : 'Администратор подтвердил завершение заказа.',
+        href: '/orders' }
     );
   } else {
     return redirect(res, '/admin/moderation?error=case_kind');
