@@ -149,6 +149,7 @@ function updateCandle(price, now = new Date(), volumeScRl = 0) {
     candle = null;
   }
 
+  let changed = false;
   if (!candle) {
     candle = {
       bucket,
@@ -158,24 +159,34 @@ function updateCandle(price, now = new Date(), volumeScRl = 0) {
       low: price,
       close: price,
       volume_scrl: Math.max(0, volumeScRl),
-      samples: 1,
+      samples: volumeScRl > 0 ? 1 : 0,
       updated_at: new Date(safeTimestamp).toISOString()
     };
     state.token_rate_candles.push(candle);
+    changed = true;
   } else {
-    candle.high = Math.max(safeNumber(candle.high, price), price);
-    candle.low = Math.min(safeNumber(candle.low, price), price);
-    candle.close = price;
-    candle.volume_scrl = safeNumber(candle.volume_scrl) + Math.max(0, volumeScRl);
-    candle.samples = safeNumber(candle.samples) + 1;
-    candle.updated_at = new Date(safeTimestamp).toISOString();
+    const nextHigh = Math.max(safeNumber(candle.high, price), price);
+    const nextLow = Math.min(safeNumber(candle.low, price), price);
+    const nextVolume = safeNumber(candle.volume_scrl) + Math.max(0, volumeScRl);
+    if (nextHigh !== candle.high || nextLow !== candle.low ||
+        price !== candle.close || volumeScRl > 0) {
+      candle.high = nextHigh;
+      candle.low = nextLow;
+      candle.close = price;
+      candle.volume_scrl = nextVolume;
+      candle.samples = safeNumber(candle.samples) + 1;
+      candle.updated_at = new Date(safeTimestamp).toISOString();
+      changed = true;
+    }
   }
 
-  state.token_rate_candles.sort((a, b) => a.bucket.localeCompare(b.bucket));
-  if (state.token_rate_candles.length > MAX_CANDLES) {
-    state.token_rate_candles.splice(0, state.token_rate_candles.length - MAX_CANDLES);
+  if (changed) {
+    state.token_rate_candles.sort((a, b) => a.bucket.localeCompare(b.bucket));
+    if (state.token_rate_candles.length > MAX_CANDLES) {
+      state.token_rate_candles.splice(0, state.token_rate_candles.length - MAX_CANDLES);
+    }
   }
-  return true;
+  return changed;
 }
 
 function persistCurrentPrice(price) {
