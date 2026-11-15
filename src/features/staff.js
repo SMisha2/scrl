@@ -98,7 +98,7 @@ function pageAdmin(res, user, url) {
       ${m('Active (7d)', activeUsers)}
       ${m('Tx (24h)', tx24h)}
     </div>
-    <div class="mt-2"><a href="/admin/users" class="btn btn-primary">Пользователи →</a></div>
+    <div class="mt-2 row"><a href="/admin/users" class="btn btn-primary">Пользователи →</a><a href="/admin/moderation" class="btn btn-ghost">Модерация →</a><a href="/admin/ai" class="btn btn-ghost">AI-помощник →</a><a href="/admin/financial" class="btn btn-ghost">Финансы →</a></div>
     <div class="card mt-2"><h2>Последние транзакции</h2>
       <table><thead><tr><th>Дата</th><th>Тип</th><th>Инициатор</th><th>Payload</th></tr></thead><tbody>${recentTx}</tbody></table>
     </div>`));
