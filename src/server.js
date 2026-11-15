@@ -62,7 +62,7 @@ const server = http.createServer(async (req, res) => {
     if (path === '/app' && method === 'GET') return pageApp(res, user, url);
     if (path === '/wallet' && method === 'GET') return pageWallet(res, user, url);
     if (path === '/market' && method === 'GET') return pageMarket(res, user, url);
-    if (path === '/market/create' && method === 'POST') return handleCreateListing(res, user, params);
+    if (path === '/market/create' && method === 'POST') return await handleCreateListing(res, user, params);
     if (path === '/market/delete' && method === 'POST') return handleDeleteListing(res, user, params);
     if (path === '/market/buy' && method === 'POST') return handleBuyListing(res, user, params);
     if (path === '/market/report' && method === 'POST') return social.handleReportListing(res, user, params);
@@ -90,8 +90,8 @@ const server = http.createServer(async (req, res) => {
     if (path === '/marketplace' && method === 'GET') return redirect(res, '/demand');
     if (path === '/demand' && method === 'GET') return community.pageDemand(res, user, url);
     if ((path === '/offers' || path === '/offer') && method === 'GET') return community.pageOffers(res, user, url);
-    if (path === '/demand/create' && method === 'POST') return community.handleCreateDemand(res, user, params);
-    if ((path === '/offers/create' || path === '/offer/create') && method === 'POST') return community.handleCreateOffer(res, user, params);
+    if (path === '/demand/create' && method === 'POST') return await community.handleCreateDemand(res, user, params);
+    if ((path === '/offers/create' || path === '/offer/create') && method === 'POST') return await community.handleCreateOffer(res, user, params);
     if (path === '/posts/respond' && method === 'POST') return community.handleRespond(res, user, params);
     if (path === '/posts/report' && method === 'POST') return social.handleReportPost(res, user, params);
     if (path === '/posts/close' && method === 'POST') return community.handleClosePost(res, user, params);
