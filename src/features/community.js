@@ -179,7 +179,7 @@ function renderResponseForm(post) {
 }
 
 function recommendedHelpOffers(user) {
-  const normalize = value => String(value || '').trim().toLocaleLowerCase('ru-RU').replace(/\\s+/g, ' ');
+  const normalize = value => String(value || '').trim().toLocaleLowerCase('ru-RU').replace(/\s+/g, ' ');
   const requests = state.demand_posts.filter(post =>
     post.user_id === user.id && post.status === 'active' && normalize(post.category)
   );
