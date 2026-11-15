@@ -437,9 +437,11 @@ function recordTx(kind, initiator, payload, entries) {
     const acc = state.accounts.find(item => item.id === entry.accountId);
     const amount = Number(entry.amount);
     if (!acc) throw new Error('Account not found');
-    if (!Number.isSafeInteger(amount) || amount === 0) throw new Error('Invalid transaction amount');
+    if (!Number.isSafeInteger(amount)) throw new Error('Invalid transaction amount');
+    if (amount === 0) return null;
     return { entry, account: acc, amount };
-  });
+  }).filter(Boolean);
+  if (resolved.length < 2) throw new Error('A transaction needs at least two non-zero ledger entries');
 
   const projected = new Map();
   for (const item of resolved) {
@@ -449,7 +451,7 @@ function recordTx(kind, initiator, payload, entries) {
     if (!Number.isSafeInteger(nextBalance) || nextBalance < 0) throw new Error('Insufficient funds or invalid balance');
   }
   const totalDelta = resolved.reduce((sum, item) => sum + item.amount, 0);
-  if (totalDelta !== 0) throw new Error('Unbalanced transaction');
+  if (!Number.isSafeInteger(totalDelta) || totalDelta !== 0) throw new Error('Unbalanced transaction');
 
   const snapshot = {
     accounts: JSON.stringify(state.accounts),
