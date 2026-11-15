@@ -45,7 +45,6 @@ function pageApp(res, user, url) {
       <a href="/deals" class="card" style="text-decoration:none;color:inherit"><b>Мои сделки</b><div class="muted small">Статусы и переписка</div></a>
       <a href="/auctions" class="card" style="text-decoration:none;color:inherit"><b>Аукционы</b><div class="muted small">Внутренние ставки ScRl</div></a>
       <a href="/notifications" class="card" style="text-decoration:none;color:inherit"><b>Уведомления</b><div class="muted small">Отклики и сообщения</div></a>
-    </div></a>
     </div>
     <div class="grid grid-2 mt-2">
       <div class="card"><h2>Последние операции</h2>${recent ? `<ul style="list-style:none">${recent}</ul>` : '<p class="muted small">Пока пусто</p>'}</div>
