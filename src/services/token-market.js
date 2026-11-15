@@ -32,19 +32,38 @@ function getRecentTrades(nowMs = Date.now()) {
     .slice(-2000);
 }
 
-function calculateMarketPrice(trades, targetRate) {
-  if (!trades.length) return { price: targetRate, volumeScRl: 0, volumeVrub: 0, tradeCount: 0, source: 'target_fallback' };
-  const volumeScRl = trades.reduce((sum, trade) => sum + safeNumber(trade.amount_scrl), 0);
-  const volumeVrub = trades.reduce((sum, trade) => sum + safeNumber(trade.amount_vrub), 0);
-  if (volumeScRl <= 0 || volumeVrub <= 0) {
-    return { price: targetRate, volumeScRl: 0, volumeVrub: 0, tradeCount: 0, source: 'target_fallback' };
+function calculateMarketPrice(trades, fallbackRate) {
+  const validTrades = Array.isArray(trades) ? trades.filter(trade =>
+    safeNumber(trade.amount_scrl) > 0 && safeNumber(trade.amount_vrub) > 0
+  ) : [];
+  if (!validTrades.length) {
+    return {
+      price: fallbackRate,
+      vwapPrice: fallbackRate,
+      volumeScRl: 0,
+      volumeVrub: 0,
+      tradeCount: 0,
+      lastTradeAt: null,
+      source: 'live_balance_ratio'
+    };
   }
+
+  const volumeScRl = validTrades.reduce((sum, trade) => sum + safeNumber(trade.amount_scrl), 0);
+  const volumeVrub = validTrades.reduce((sum, trade) => sum + safeNumber(trade.amount_vrub), 0);
+  const latest = validTrades[validTrades.length - 1];
+  const latestPrice = safeNumber(latest.amount_vrub) / safeNumber(latest.amount_scrl);
+  const vwapPrice = volumeScRl > 0 ? volumeVrub / volumeScRl : fallbackRate;
+
   return {
-    price: volumeVrub / volumeScRl,
+    // The current market price follows the latest completed exchange immediately.
+    // The seven-day VWAP remains visible as a separate historical indicator.
+    price: latestPrice,
+    vwapPrice,
     volumeScRl,
     volumeVrub,
-    tradeCount: trades.length,
-    source: 'seven_day_vwap'
+    tradeCount: validTrades.length,
+    lastTradeAt: latest.created_at || null,
+    source: 'last_executed_trade'
   };
 }
 
@@ -89,7 +108,7 @@ function getTokenMarketStats(now = new Date()) {
   const remainingCapacityScRl = Math.max(0, maxSupportedScRl - circulatingScRl);
 
   const trades = getRecentTrades(safeNow);
-  const market = calculateMarketPrice(trades, targetRate);
+  const market = calculateMarketPrice(trades, backedRate);
   const burnFeeRate = getBurnFeeRate(coverageRatio);
 
   return {
@@ -105,15 +124,20 @@ function getTokenMarketStats(now = new Date()) {
     excessScRl,
     backedRate: Number(backedRate.toFixed(6)),
     coverageRatio: Number(coverageRatio.toFixed(6)),
+    // referenceRate is the live ratio of all student-held V-RUB to circulating ScRl.
+    // marketPrice is the latest executed trade; these are intentionally separate.
     marketPrice: Number(market.price.toFixed(6)),
-    referenceRate: Number(market.price.toFixed(6)),
+    lastTradePrice: Number(market.price.toFixed(6)),
+    vwapPrice: Number(market.vwapPrice.toFixed(6)),
+    referenceRate: Number(backedRate.toFixed(6)),
     marketPriceSource: market.source,
+    lastTradeAt: market.lastTradeAt,
     marketVolumeScRl: market.volumeScRl,
     marketVolumeVrub: market.volumeVrub,
     marketTradeCount: market.tradeCount,
     burnFeeRate: Number(burnFeeRate.toFixed(6)),
     realRubAvailable: 0,
-    formula: 'Рыночная цена = объём V-RUB по сделкам за 7 дней / объём ScRl по тем же сделкам',
+    formula: 'Текущее соотношение = все V-RUB участников / все ScRl в обращении; последняя рыночная цена = последняя исполненная сделка',
     backingFormula: 'Максимум ScRl в обращении = V-RUB всех учеников / целевой курс'
   };
 }
@@ -144,7 +168,7 @@ function updateCandle(price, now = new Date(), volumeScRl = 0) {
   let candle = state.token_rate_candles.find(item => item.bucket === bucket);
 
   // Earlier candles stored a balance ratio, not an executed market price.
-  if (candle && candle.model !== 'market_vwap_v1') {
+  if (candle && candle.model !== 'market_spot_v2') {
     state.token_rate_candles = state.token_rate_candles.filter(item => item.bucket !== bucket);
     candle = null;
   }
@@ -153,7 +177,7 @@ function updateCandle(price, now = new Date(), volumeScRl = 0) {
   if (!candle) {
     candle = {
       bucket,
-      model: 'market_vwap_v1',
+      model: 'market_spot_v2',
       open: price,
       high: price,
       low: price,
@@ -189,6 +213,14 @@ function updateCandle(price, now = new Date(), volumeScRl = 0) {
   return changed;
 }
 
+function persistBackedRate(rate) {
+  const previousRate = safeNumber(state.settings.token_backed_rate, -1);
+  if (previousRate === rate) return false;
+  state.settings.token_backed_rate = rate;
+  state.settings.token_backed_rate_updated_at = new Date().toISOString();
+  return true;
+}
+
 function persistCurrentPrice(price) {
   const previousRate = safeNumber(state.settings.token_exchange_rate, -1);
   if (previousRate === price) return false;
@@ -201,10 +233,11 @@ function recordTokenRateCandle(now = new Date()) {
   const stats = getTokenMarketStats(now);
   const candleChanged = updateCandle(stats.marketPrice, now, 0);
   const rateChanged = persistCurrentPrice(stats.marketPrice);
-  if (candleChanged || rateChanged) save();
+  const backedRateChanged = persistBackedRate(stats.backedRate);
+  if (candleChanged || rateChanged || backedRateChanged) save();
   return {
     ...stats,
-    candles: state.token_rate_candles.filter(item => item.model === 'market_vwap_v1').slice(-MAX_CANDLES)
+    candles: state.token_rate_candles.filter(item => item.model === 'market_spot_v2').slice(-MAX_CANDLES)
   };
 }
 
@@ -240,6 +273,7 @@ function recordTokenMarketTrade(data) {
   const stats = getTokenMarketStats(createdAt);
   updateCandle(stats.marketPrice, createdAt, amountScRl);
   persistCurrentPrice(stats.marketPrice);
+  persistBackedRate(stats.backedRate);
   save();
 
   return {
