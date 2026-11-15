@@ -162,47 +162,61 @@ function handleBid(res, user, params) {
   const amount = Number(params.get('amount') || 0);
   const auction = state.auctions.find(item => item.id === auctionId && item.status === 'active');
   if (!auction) return redirect(res, '/auctions?error=notfound');
-  if (new Date(auction.ends_at).getTime() < Date.now()) return redirect(res, '/auctions?error=ended');
+
+  const endTime = new Date(auction.ends_at).getTime();
+  if (!Number.isFinite(endTime)) return redirect(res, '/auctions?error=invalid_auction');
+  if (endTime < Date.now()) return redirect(res, '/auctions?error=ended');
   if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) return redirect(res, '/auctions?error=amount');
 
-  const minNext = auction.current_bid > 0 ? auction.current_bid + auction.min_step : auction.start_price;
-  if (amount < minNext) return redirect(res, '/auctions?error=low');
-  const sameLeader = auction.current_winner_id === user.id;
-  const spendable = balance(user.id, 'available') + (sameLeader ? Number(auction.current_bid) : 0);
+  const currentBid = Number(auction.current_bid || 0);
+  const minNext = currentBid > 0 ? currentBid + Number(auction.min_step || 0) : Number(auction.start_price || 0);
+  if (!Number.isSafeInteger(minNext) || minNext < 1 || amount < minNext) return redirect(res, '/auctions?error=low');
+
+  const sameLeader = Boolean(auction.current_winner_id && auction.current_winner_id === user.id);
+  const spendable = balance(user.id, 'available') + (sameLeader ? currentBid : 0);
   if (spendable < amount) return redirect(res, '/auctions?error=insufficient');
 
-  if (auction.current_winner_id && Number(auction.current_bid) > 0) {
-    const previousBid = state.bids.find(bid => bid.auction_id === auctionId &&
-      bid.bidder_id === auction.current_winner_id && bid.amount === auction.current_bid && bid.status === 'active');
-    const previousHeld = state.accounts.find(item => item.user_id === auction.current_winner_id && item.kind === 'held');
-    if (!previousBid || !previousHeld || auctionEscrowBalance(auctionId, auction.current_winner_id) !== Number(auction.current_bid) || previousHeld.balance < auction.current_bid) {
+  const original = {
+    current_bid: auction.current_bid,
+    current_winner_id: auction.current_winner_id,
+    last_bid_at: auction.last_bid_at
+  };
+  let previousBid = null;
+  let previousHeld = null;
+
+  if (auction.current_winner_id || currentBid > 0) {
+    if (!auction.current_winner_id || !Number.isSafeInteger(currentBid) || currentBid < 1) {
       return redirect(res, '/auctions?error=escrow');
     }
-    try {
-      recordTx('auction_refund', auction.current_winner_id,
-        { auctionId, bidId: previousBid.id, amount: auction.current_bid }, [
-          { accountId: previousHeld.id, amount: -auction.current_bid, note: 'Возврат прежней ставки' },
-          { accountId: account(auction.current_winner_id, 'available').id, amount: auction.current_bid, note: 'Возврат прежней ставки' }
-        ]);
-    } catch (error) {
-      console.error('Auction outbid refund failed:', error.message);
-      return redirect(res, '/auctions?error=refund');
+    previousBid = state.bids.find(bid => bid.auction_id === auctionId &&
+      bid.bidder_id === auction.current_winner_id && bid.amount === currentBid && bid.status === 'active');
+    previousHeld = state.accounts.find(item => item.user_id === auction.current_winner_id && item.kind === 'held');
+    if (!previousBid || !previousHeld ||
+        auctionEscrowBalance(auctionId, auction.current_winner_id) !== currentBid ||
+        previousHeld.balance < currentBid) {
+      return redirect(res, '/auctions?error=escrow');
     }
+
+    const previousStatus = previousBid.status;
     previousBid.status = sameLeader ? 'raised' : 'outbid';
     auction.current_winner_id = null;
     auction.current_bid = 0;
-    save();
-  }
-
-  try {
-    recordTx('auction_hold', user.id, { auctionId, amount }, [
-      { accountId: account(user.id, 'available').id, amount: -amount, note: 'Ставка' },
-      { accountId: account(user.id, 'held').id, amount, note: 'Резерв ставки' }
-    ]);
-  } catch (error) {
-    console.error('Auction bid hold failed:', error.message);
-    save();
-    return redirect(res, '/auctions?error=hold');
+    auction.last_bid_at = null;
+    try {
+      recordTx('auction_refund', auction.current_winner_id || previousBid.bidder_id,
+        { auctionId, bidId: previousBid.id, amount: currentBid }, [
+          { accountId: previousHeld.id, amount: -currentBid, note: 'Возврат прежней ставки' },
+          { accountId: account(previousBid.bidder_id, 'available').id, amount: currentBid, note: 'Возврат прежней ставки' }
+        ]);
+    } catch (error) {
+      previousBid.status = previousStatus;
+      auction.current_bid = original.current_bid;
+      auction.current_winner_id = original.current_winner_id;
+      auction.last_bid_at = original.last_bid_at;
+      save();
+      console.error('Auction outbid refund failed:', error.message);
+      return redirect(res, '/auctions?error=refund');
+    }
   }
 
   const bid = {
@@ -213,7 +227,21 @@ function handleBid(res, user, params) {
   auction.current_bid = amount;
   auction.current_winner_id = user.id;
   auction.last_bid_at = bid.created_at;
-  save();
+
+  try {
+    recordTx('auction_hold', user.id, { auctionId, amount, bidId: bid.id }, [
+      { accountId: account(user.id, 'available').id, amount: -amount, note: 'Ставка' },
+      { accountId: account(user.id, 'held').id, amount, note: 'Резерв ставки' }
+    ]);
+  } catch (error) {
+    state.bids = state.bids.filter(item => item.id !== bid.id);
+    auction.current_bid = 0;
+    auction.current_winner_id = null;
+    auction.last_bid_at = null;
+    save();
+    console.error('Auction bid hold failed:', error.message);
+    return redirect(res, '/auctions?error=hold');
+  }
   return redirect(res, '/auctions?msg=bid');
 }
 
