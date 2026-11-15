@@ -26,7 +26,7 @@ function pageMarket(res, user, url) {
 
   const mine = myListings.map(l => `<div class="card">
     <div class="row-between">
-      <div><b>${esc(l.title)}</b><div class="muted small">${esc(l.category)} · ${l.price} ScRl</div></div>
+      <div><b>${esc(l.title)}</b><div class="muted small">${esc(l.category)} · ${l.price} ScRl</div><span class="badge badge-accent">${l.status === "pending" ? "На проверке" : "Активно"}</span></div>
       <form method="POST" action="/market/delete"><input type="hidden" name="listing_id" value="${l.id}"><button class="btn btn-ghost btn-sm">Удалить</button></form>
     </div></div>`).join('');
 
