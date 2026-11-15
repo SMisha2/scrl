@@ -8,6 +8,7 @@ const { layout } = require('../views/layout');
 const { getTokenMarketStats } = require('../services/token-market');
 const { sessions } = require('../session');
 const { hashPassword } = require('../security');
+const { notify } = require('../utils/notifications');
 const { changeUserRole, anonymizeUser, hasOpenActivities } = require('../services/user-admin');
 function pageTeacher(res, user, url) {
   if (user.role !== 'teacher') return redirect(res, '/');
@@ -72,6 +73,13 @@ function handleIssue(res, user, params) {
     console.error('Teacher credit failed:', error.message);
     return redirect(res, error.code === 'backing_limit' ? '/teacher?error=backing_limit' : '/teacher?error=ledger');
   }
+  notify(
+    userId,
+    'wallet',
+    'Учитель начислил тебе ScRl',
+    user.full_name + ' начислил ' + amount + ' ScRl. Токены уже доступны: можешь выбрать услугу другого ученика.',
+    '/market'
+  );
   return redirect(res, '/teacher?msg=issued');
 }
 

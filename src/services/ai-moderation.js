@@ -1,11 +1,23 @@
 const { analyseText } = require('./moderation-rules');
 
 const GIGACHAT_OAUTH_ENDPOINT = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
-const GIGACHAT_CHAT_ENDPOINT = 'https://api.giga.chat/v1/chat/completions';
-const GIGACHAT_MODEL = process.env.SCRL_GIGACHAT_MODEL || 'GigaChat';
+const GIGACHAT_API_BASE = 'https://api.giga.chat';
+const GIGACHAT_CHAT_ENDPOINT = GIGACHAT_API_BASE + '/v1/chat/completions';
+const GIGACHAT_MODELS_ENDPOINT = GIGACHAT_API_BASE + '/v1/models';
+const GIGACHAT_MODEL_PREFERENCE = Object.freeze([
+  'GigaChat-2-Pro',
+  'GigaChat-2',
+  'GigaChat-2-Max',
+  'GigaChat-3-Ultra'
+]);
+const GIGACHAT_MODEL_CACHE_MS = 10 * 60 * 1000;
 let cachedGigaToken = null;
 let cachedGigaTokenExpiresAt = 0;
 let pendingGigaTokenRequest = null;
+let cachedGigaModel = null;
+let cachedGigaModelKey = '';
+let cachedGigaModelExpiresAt = 0;
+let pendingGigaModelRequest = null;
 const MAX_INPUT_CHARS = 2200;
 const REQUEST_TIMEOUT_MS = 6500;
 
@@ -171,9 +183,10 @@ function getApiConfig() {
   if (!authKey) return null;
   return {
     endpoint: GIGACHAT_CHAT_ENDPOINT,
+    modelsEndpoint: GIGACHAT_MODELS_ENDPOINT,
     authEndpoint: GIGACHAT_OAUTH_ENDPOINT,
     authKey,
-    model: GIGACHAT_MODEL,
+    model: String(process.env.SCRL_GIGACHAT_MODEL || 'auto').trim(),
     provider: 'gigachat'
   };
 }
@@ -215,6 +228,80 @@ async function getGigaChatAccessToken(config) {
   }
 }
 
+async function getGigaChatModel(config, accessToken) {
+  const cacheKey = config.authKey + ':' + config.model;
+  if (cachedGigaModel && cachedGigaModelKey === cacheKey && Date.now() < cachedGigaModelExpiresAt) {
+    return cachedGigaModel;
+  }
+  if (pendingGigaModelRequest) return pendingGigaModelRequest;
+
+  pendingGigaModelRequest = (async () => {
+    const response = await fetch(config.modelsEndpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer ' + accessToken,
+        Accept: 'application/json'
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+    if (!response.ok) throw new Error('GigaChat models HTTP ' + response.status);
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload && payload.data)
+      ? payload.data
+      : Array.isArray(payload && payload.models) ? payload.models : [];
+    const available = [...new Set(rows
+      .map(item => typeof item === 'string' ? item : item && (item.id || item.name))
+      .filter(id => typeof id === 'string' && /^GigaChat(?:-|$)/i.test(id)))];
+
+    if (!available.length) throw new Error('GigaChat returned no available chat models');
+
+    // Never prefer the legacy generic "GigaChat" alias: choose only an explicit
+    // model ID currently exposed to this API key.
+    const configured = config.model && config.model.toLowerCase() !== 'auto' && config.model !== 'GigaChat'
+      ? [config.model]
+      : [];
+    const preferred = [...configured, ...GIGACHAT_MODEL_PREFERENCE];
+    const selected = preferred.find(model => available.includes(model)) ||
+      available.find(model => model !== 'GigaChat') || available[0];
+
+    cachedGigaModel = selected;
+    cachedGigaModelKey = cacheKey;
+    cachedGigaModelExpiresAt = Date.now() + GIGACHAT_MODEL_CACHE_MS;
+    return selected;
+  })();
+
+  try {
+    return await pendingGigaModelRequest;
+  } finally {
+    pendingGigaModelRequest = null;
+  }
+}
+
+async function apiErrorDetail(response) {
+  if (!response || typeof response.text !== 'function') return '';
+  try {
+    const raw = await response.text();
+    if (!raw) return '';
+    let detail = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      const nestedError = parsed && parsed.error;
+      detail = parsed.message || parsed.error_description ||
+        (typeof nestedError === 'string' ? nestedError : nestedError && nestedError.message) ||
+        parsed.detail || '';
+    } catch {
+      detail = raw;
+    }
+    return String(detail)
+      .replace(/(?:Bearer|Basic)\s+\S+/giu, '[REDACTED]')
+      .replace(/\s+/gu, ' ')
+      .slice(0, 180);
+  } catch {
+    return '';
+  }
+}
+
 function markForReviewWhenAiUnavailable(ruleResult) {
   const findings = [...(ruleResult.findings || [])];
   if (!findings.some(item => item.code === 'ai_unavailable')) {
@@ -251,6 +338,7 @@ async function analyseSubmission(value) {
     let response;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const accessToken = await getGigaChatAccessToken(config);
+      const model = await getGigaChatModel(config, accessToken);
       response = await fetch(config.endpoint, {
         method: 'POST',
         headers: {
@@ -259,7 +347,7 @@ async function analyseSubmission(value) {
           'User-Agent': 'ScRl-moderation/1.0'
         },
         body: JSON.stringify({
-          model: config.model,
+          model,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             {
@@ -276,10 +364,16 @@ async function analyseSubmission(value) {
       if (response.status !== 401 || attempt === 1) break;
       cachedGigaToken = null;
       cachedGigaTokenExpiresAt = 0;
+      cachedGigaModel = null;
+      cachedGigaModelKey = '';
+      cachedGigaModelExpiresAt = 0;
     }
 
     if (!response || !response.ok) {
-      console.warn('GigaChat moderation unavailable; routing submission to human review. HTTP ' + (response ? response.status : 'no_response'));
+      const status = response ? response.status : 'no_response';
+      const detail = await apiErrorDetail(response);
+      console.warn('GigaChat moderation unavailable; routing submission to human review. HTTP ' + status +
+        (detail ? ' — ' + detail : ''));
       return markForReviewWhenAiUnavailable(ruleResult);
     }
 
@@ -305,5 +399,6 @@ module.exports = {
   mergeResults,
   getApiConfig,
   tokenExpiryMs,
+  getGigaChatModel,
   markForReviewWhenAiUnavailable
 };
