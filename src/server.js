@@ -5,7 +5,7 @@ const { readBody, sendHtml, redirect, esc } = require('./utils/http');
 const { layout } = require('./views/layout');
 const { pageLogin, doLogin, pageRegister, doRegister, doLogout } = require('./features/auth');
 const { pageApp, pageWallet } = require('./features/student');
-const { pageMarket, handleCreateListing, handleDeleteListing, handleBuyListing, pageOrders, handleDeliver, handleConfirm } = require('./features/market');
+const { pageMarket, handleCreateListing, handleDeleteListing, handleBuyListing, pageOrders, handleDeliver, handleOrderDispute, handleConfirm } = require('./features/market');
 const { pageAuctions, handleCreateAuction, handleBid, handleFinishAuction } = require('./features/auctions');
 const { pageExchange, handleExchangeSell, handleExchangeCancel, handleExchangeBuy } = require('./features/exchange');
 const { pageTeacher, handleIssue, pageAdmin, pageAdminUsers, handleCredit, handleDebit, handleBlock } = require('./features/staff');
@@ -68,6 +68,7 @@ const server = http.createServer(async (req, res) => {
     if (path === '/market/report' && method === 'POST') return social.handleReportListing(res, user, params);
     if (path === '/orders' && method === 'GET') return pageOrders(res, user, url);
     if (path === '/orders/deliver' && method === 'POST') return handleDeliver(res, user, params);
+    if (path === '/orders/dispute' && method === 'POST') return handleOrderDispute(res, user, params);
     if (path === '/orders/confirm' && method === 'POST') return handleConfirm(res, user, params);
     if (path === '/auctions' && method === 'GET') return pageAuctions(res, user, url);
     if (path === '/auctions/create' && method === 'POST') return handleCreateAuction(res, user, params);
