@@ -14,6 +14,8 @@ const assistant = require('./features/assistant');
 const moderation = require('./features/moderation-v2');
 const social = require('./features/social');
 const finance = require('./features/finance');
+const { bootstrapAdmin } = require('./services/admin-bootstrap');
+bootstrapAdmin();
 
 function isSameOrigin(req) {
   const expectedHost = String(req.headers.host || '').toLowerCase();
