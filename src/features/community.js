@@ -5,7 +5,7 @@ const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
 const { notify, unreadCount } = require('../utils/notifications');
-const { analyseText } = require('../services/moderation-rules');
+const { analyseSubmission } = require('../services/ai-moderation');
 
 function dealLedgerState(deal) {
   const held = state.accounts.find(item => item.user_id === deal.buyer_id && item.kind === 'held');
@@ -99,7 +99,7 @@ function pageBoard(res, user, url, kind) {
 function pageDemand(res, user, url) { return pageBoard(res, user, url, 'demand'); }
 function pageOffers(res, user, url) { return pageBoard(res, user, url, 'offer'); }
 
-function createPost(res, user, params, kind) {
+async function createPost(res, user, params, kind) {
   if (user.role !== 'student') return redirect(res, '/');
   const isDemand = kind === 'demand';
   const title = (params.get('title') || '').trim().slice(0, 100);
@@ -118,7 +118,7 @@ function createPost(res, user, params, kind) {
   }
   if (mode === 'fixed' && price < 1) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
   if (mode === 'range' && (price < 1 || priceMax < price || priceMax > 1000000)) return redirect(res, (isDemand ? '/demand' : '/offers') + '?error=fields');
-  const moderation = analyseText(title + '\n' + description + '\n' + category);
+  const moderation = await analyseSubmission(title + '\n' + description + '\n' + category);
   const post = {
     id: crypto.randomUUID(), user_id: user.id, title, description, category,
     price_mode: mode, price, price_min: mode === 'range' ? price : null,
@@ -146,8 +146,8 @@ function createPost(res, user, params, kind) {
   return redirect(res, (isDemand ? '/demand' : '/offers') + '?msg=created');
 }
 
-function handleCreateDemand(res, user, params) { return createPost(res, user, params, 'demand'); }
-function handleCreateOffer(res, user, params) { return createPost(res, user, params, 'offer'); }
+async function handleCreateDemand(res, user, params) { return createPost(res, user, params, 'demand'); }
+async function handleCreateOffer(res, user, params) { return createPost(res, user, params, 'offer');
 
 function handleRespond(res, user, params) {
   if (user.role !== 'student') return redirect(res, '/');
