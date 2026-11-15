@@ -171,7 +171,8 @@ function handleModerationAction(res, user, params) {
     deal.dispute_resolved_at = now;
     if (decision === 'release_seller') deal.completed_at = now;
     const post = findPost(deal.post_kind, deal.post_id);
-    if (post && decision === 'release_seller') post.status = 'completed';
+    if (post && decision === 'release_seller') { post.status = 'completed'; post.updated_at = now; }
+    else if (post && decision === 'refund_buyer' && post.status === 'in_progress') { post.status = 'active'; post.updated_at = now; }
     item.decision = decision;
     messages.push(
       { id: deal.buyer_id, title: 'Спор по сделке рассмотрен', body: decision === 'refund_buyer' ? 'Сделка отменена, зарезервированные ScRl возвращены.' : 'Администратор подтвердил завершение сделки.', href: '/deals' },
