@@ -60,21 +60,24 @@ function handleExchangeSell(res, user, params) {
     return redirect(res, '/exchange?error=fields');
   }
   if (balance(user.id, 'available') < amount) return redirect(res, '/exchange?error=insufficient');
+
   const orderId = crypto.randomUUID();
+  const order = {
+    id: orderId, seller_id: user.id, amount, price_per_unit: price,
+    status: 'active', created_at: new Date().toISOString()
+  };
+  state.exchange_orders.unshift(order);
   try {
     recordTx('exchange_hold', user.id, { orderId, amount, price }, [
       { accountId: account(user.id, 'available').id, amount: -amount, note: 'Заявка на продажу' },
       { accountId: account(user.id, 'held').id, amount, note: 'Резерв заявки на продажу' }
     ]);
   } catch (error) {
+    state.exchange_orders = state.exchange_orders.filter(item => item.id !== orderId);
+    save();
     console.error('Exchange hold failed:', error.message);
     return redirect(res, '/exchange?error=hold');
   }
-  state.exchange_orders.push({
-    id: orderId, seller_id: user.id, amount, price_per_unit: price,
-    status: 'active', created_at: new Date().toISOString()
-  });
-  save();
   return redirect(res, '/exchange?msg=sold');
 }
 
@@ -88,18 +91,22 @@ function handleExchangeCancel(res, user, params) {
   const escrow = exchangeEscrow(order.id, user.id);
   const held = escrow.held;
   if (!held || escrow.amount !== order.amount || held.balance < order.amount) return redirect(res, '/exchange?error=escrow');
+
+  const previousStatus = order.status;
+  order.status = 'cancelled';
+  order.cancelled_at = new Date().toISOString();
   try {
     recordTx('exchange_cancel', user.id, { orderId, amount: order.amount }, [
       { accountId: held.id, amount: -order.amount, note: 'Отмена заявки' },
       { accountId: account(user.id, 'available').id, amount: order.amount, note: 'Возврат ScRl по отменённой заявке' }
     ]);
   } catch (error) {
+    order.status = previousStatus;
+    delete order.cancelled_at;
+    save();
     console.error('Exchange cancel failed:', error.message);
     return redirect(res, '/exchange?error=refund');
   }
-  order.status = 'cancelled';
-  order.cancelled_at = new Date().toISOString();
-  save();
   return redirect(res, '/exchange?msg=cancelled');
 }
 
@@ -127,6 +134,11 @@ function handleExchangeBuy(res, user, params) {
   if (!held || escrow.amount !== amount || held.balance < amount) return redirect(res, '/exchange?error=escrow');
   const commission = Math.min(amount - 1, Math.floor(amount * 0.01));
   const buyerGets = amount - commission;
+  const previous = { status: order.status, buyer_id: order.buyer_id, filled_at: order.filled_at };
+  order.status = 'filled';
+  order.buyer_id = user.id;
+  order.filled_at = new Date().toISOString();
+
   try {
     const entries = [
       { accountId: held.id, amount: -amount, note: 'Продажа ScRl' },
@@ -134,7 +146,7 @@ function handleExchangeBuy(res, user, params) {
     ];
     if (commission > 0) {
       const burn = systemAccount('burn');
-      if (!burn) return redirect(res, '/exchange?error=ledger');
+      if (!burn) throw new Error('Burn account is not configured');
       entries.push({ accountId: burn.id, amount: commission, note: 'Комиссия 1%' });
     }
     entries.push(
@@ -143,13 +155,15 @@ function handleExchangeBuy(res, user, params) {
     );
     recordTx('exchange_trade', user.id, { orderId, amount, price, cost, commission }, entries);
   } catch (error) {
+    order.status = previous.status;
+    if (previous.buyer_id === undefined) delete order.buyer_id;
+    else order.buyer_id = previous.buyer_id;
+    if (previous.filled_at === undefined) delete order.filled_at;
+    else order.filled_at = previous.filled_at;
+    save();
     console.error('Exchange trade failed:', error.message);
     return redirect(res, '/exchange?error=trade');
   }
-  order.status = 'filled';
-  order.buyer_id = user.id;
-  order.filled_at = new Date().toISOString();
-  save();
   return redirect(res, '/exchange?msg=bought');
 }
 
