@@ -257,7 +257,7 @@ function pageCommunity(res, user, url) {
       esc(moneyLabel(match.offer)) + '</p></div>' + renderResponseForm({ ...match.offer, post_kind: 'offer' }) + '</article>'
   ).join('');
   const recommendationSection = recommendations
-    ? '<section class="help-recommendations"><h2>Подходящие предложения</h2><p>Нашлись по категориям твоих запросов.</p>' + recommendations + '</section>'
+    ? '<section class="help-recommendations"><h2>По твоим запросам</h2><p>Предложения из тех же категорий.</p>' + recommendations + '</section>'
     : '';
   sendHtml(res, layout('Общая доска', user,
     flashBox(url) + '<div class="page-heading"><h1>Доска помощи</h1><p class="muted">Запросы и предложения учеников.</p></div>' +
