@@ -4,6 +4,17 @@ const { canTrade } = require('../session');
 const { esc, sendHtml, redirect } = require('../utils/http');
 const { flashBox } = require('../views/feedback');
 const { layout } = require('../views/layout');
+function auctionEscrowBalance(auctionId, userId) {
+  const held = state.accounts.find(item => item.user_id === userId && item.kind === 'held');
+  if (!held) return 0;
+  const txIds = new Set(state.transactions
+    .filter(tx => tx.payload && tx.payload.auctionId === auctionId)
+    .map(tx => tx.id));
+  return state.entries
+    .filter(entry => txIds.has(entry.tx_id) && entry.account_id === held.id)
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+}
+
 function autoFinishAuctions() {
   let changed = false;
   for (const auction of state.auctions) {
@@ -16,7 +27,7 @@ function autoFinishAuctions() {
       const held = state.accounts.find(item => item.user_id === auction.current_winner_id && item.kind === 'held');
       const burn = systemAccount('burn');
 
-      if (!existing && (!winningBid || !held || held.balance < auction.current_bid || !burn)) {
+      if (!existing && (!winningBid || !held || auctionEscrowBalance(auction.id, auction.current_winner_id) !== Number(auction.current_bid) || held.balance < auction.current_bid || !burn)) {
         auction.status = 'settlement_error';
         auction.settlement_error = 'Не удалось подтвердить удержанную победную ставку.';
         auction.settlement_error_at = new Date().toISOString();
@@ -164,7 +175,7 @@ function handleBid(res, user, params) {
     const previousBid = state.bids.find(bid => bid.auction_id === auctionId &&
       bid.bidder_id === auction.current_winner_id && bid.amount === auction.current_bid && bid.status === 'active');
     const previousHeld = state.accounts.find(item => item.user_id === auction.current_winner_id && item.kind === 'held');
-    if (!previousBid || !previousHeld || previousHeld.balance < auction.current_bid) {
+    if (!previousBid || !previousHeld || auctionEscrowBalance(auctionId, auction.current_winner_id) !== Number(auction.current_bid) || previousHeld.balance < auction.current_bid) {
       return redirect(res, '/auctions?error=escrow');
     }
     try {
