@@ -94,7 +94,7 @@ function pageModeration(res, user, url) {
       buttons = target && target.status === 'pending'
         ? '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="approve"><button class="btn btn-primary btn-sm">Одобрить</button></form>' +
           '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="reject"><button class="btn btn-danger btn-sm">Отклонить</button></form>'
-        : '<span class="badge badge-muted">Объект уже изменён — действие недоступно</span>';
+        : '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="close_stale"><button class="btn btn-ghost btn-sm">Закрыть устаревшую проверку</button></form>';
     } else if (item.kind === 'market_order' && order?.status === 'disputed') {
       const paid = Number(order.price || 0) > 0;
       buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="refund_buyer"><button class="btn btn-ghost btn-sm">' + (paid ? 'Вернуть ScRl покупателю' : 'Закрыть заказ с возвратом') + '</button></form>' +
@@ -238,22 +238,28 @@ function handleModerationAction(res, user, params) {
   const messages = [];
 
   if (item.kind === 'post' || item.kind === 'listing') {
-    if (!['approve', 'reject'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
     const post = item.kind === 'post' ? findPost(item.post_kind, item.target_id) : null;
     const listing = item.kind === 'listing' ? state.listings.find(x => x.id === item.target_id) : null;
     const target = post || listing;
     const canModerate = target && target.status === 'pending';
-    if (canModerate) {
-      target.status = decision === 'approve' ? 'active' : 'rejected';
-      target.moderated_by = user.id;
-      target.moderated_at = now;
-      target.moderation_decision = decision;
-      messages.push({ id: post ? post.user_id : listing.seller_id,
-        title: decision === 'approve' ? 'Публикация одобрена' : 'Публикация отклонена',
-        body: decision === 'approve' ? 'Публикация прошла ручную проверку.' : 'Публикация не прошла ручную проверку. При необходимости обратитесь к администрации.',
-        href: item.kind === 'listing' ? '/market' : item.post_kind === 'offer' ? '/offers' : '/demand' });
+
+    if (decision === 'close_stale') {
+      if (canModerate) return redirect(res, '/admin/moderation?error=decision');
+      item.decision = 'closed_stale';
+    } else {
+      if (!['approve', 'reject'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
+      if (canModerate) {
+        target.status = decision === 'approve' ? 'active' : 'rejected';
+        target.moderated_by = user.id;
+        target.moderated_at = now;
+        target.moderation_decision = decision;
+        messages.push({ id: post ? post.user_id : listing.seller_id,
+          title: decision === 'approve' ? 'Публикация одобрена' : 'Публикация отклонена',
+          body: decision === 'approve' ? 'Публикация прошла ручную проверку.' : 'Публикация не прошла ручную проверку. При необходимости обратитесь к администрации.',
+          href: item.kind === 'listing' ? '/market' : item.post_kind === 'offer' ? '/offers' : '/demand' });
+      }
+      item.decision = canModerate ? decision : 'target_missing_or_changed';
     }
-    item.decision = canModerate ? decision : 'target_missing_or_changed';
   } else if (item.kind === 'deal') {
     const deal = state.deals.find(entry => entry.id === item.target_id);
     if (!deal || deal.status !== 'disputed') return redirect(res, '/admin/moderation?error=deal_state');
