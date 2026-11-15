@@ -63,11 +63,11 @@ function pageApp(res, user, url) {
   const titleName = String(user.full_name || 'ученик').trim().split(/\s+/)[0] || 'ученик';
   const content = flashBox(url) +
     '<header class="home-greeting"><h1>Привет, ' + esc(titleName) + '</h1>' +
-    '<p></header>' +
+    '</header>' +
     '<section class="home-balances" aria-label="Баланс">' +
       '<div class="home-balance"><small>Доступно</small><strong>' + available.toLocaleString('ru-RU') + ' ScRl</strong>' +
         '<span class="muted small">' + held.toLocaleString('ru-RU') + ' ScRl в резерве</span></div>' +
-      '<div class="home-balance home-balance-secondary"><small>Виртуальные рубли</small><strong>' +
+      '<div class="home-balance home-balance-secondary"><small>V-RUB</small><strong>' +
         vrub.toLocaleString('ru-RU') + ' V-RUB</strong></div>' +
     '</section>' +
     (!tradeable ? '<p class="muted small" style="margin-bottom:18px">Платные сделки и аукционы доступны с 14 лет. Бесплатная помощь доступна всем участникам.</p>' : '') +
@@ -91,7 +91,7 @@ function pageApp(res, user, url) {
     '<section class="home-rate"><div class="row-between"><div><span class="muted small">Курс ScRl</span>' +
       '<div><strong>1 ScRl = ' + Number(market.referenceRate || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 6 }) +
       ' V-RUB</strong></div></div><a class="small" href="/exchange">Биржа →</a></div>' +
-      '<p class="muted small" style="margin-top:5px">V-RUB. Внутренняя единица ScRl, не реальные деньги.</p></section>';
+      '</section>';
 
   sendHtml(res, layout('Главная', user, content));
 }
