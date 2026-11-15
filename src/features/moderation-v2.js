@@ -30,21 +30,23 @@ function reportMeta(report) {
 function pageModeration(res, user, url) {
   if (user.role !== 'admin') return redirect(res, '/');
   const query = (url.searchParams.get('q') || '').trim().toLowerCase().slice(0, 100);
-  const cases = state.moderation_cases.filter(item => item.status === 'open' && ['post', 'deal'].includes(item.kind)).filter(item => {
+  const cases = state.moderation_cases.filter(item => item.status === 'open' && ['post', 'deal', 'listing'].includes(item.kind)).filter(item => {
     const post = item.kind === 'post' ? findPost(item.post_kind, item.target_id) : null;
     const deal = item.kind === 'deal' ? state.deals.find(x => x.id === item.target_id) : null;
-    return !query || [item.reason, item.recommendation, post?.title, post?.description, deal?.dispute_reason, deal?.id]
+    const listing = item.kind === 'listing' ? state.listings.find(x => x.id === item.target_id) : null;
+    return !query || [item.reason, item.recommendation, post?.title, post?.description, listing?.title, listing?.description, deal?.dispute_reason, deal?.id]
       .filter(Boolean).join(' ').toLowerCase().includes(query);
   }).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
   const caseHtml = cases.map(item => {
     const post = item.kind === 'post' ? findPost(item.post_kind, item.target_id) : null;
     const deal = item.kind === 'deal' ? state.deals.find(x => x.id === item.target_id) : null;
-    const author = post ? state.users.find(x => x.id === post.user_id) : null;
+    const listing = item.kind === 'listing' ? state.listings.find(x => x.id === item.target_id) : null;
+    const author = post ? state.users.find(x => x.id === post.user_id) : listing ? state.users.find(x => x.id === listing.seller_id) : null;
     const buyer = deal ? state.users.find(x => x.id === deal.buyer_id) : null;
     const seller = deal ? state.users.find(x => x.id === deal.seller_id) : null;
     let buttons = '';
-    if (item.kind === 'post') {
+    if (item.kind === 'post' || item.kind === 'listing') {
       buttons = '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="approve"><button class="btn btn-primary btn-sm">Одобрить</button></form>' +
         '<form method="POST" action="/admin/moderation/action"><input type="hidden" name="case_id" value="' + esc(item.id) + '"><input type="hidden" name="decision" value="reject"><button class="btn btn-danger btn-sm">Отклонить</button></form>';
     } else if (item.kind === 'deal' && deal?.status === 'disputed') {
@@ -54,14 +56,14 @@ function pageModeration(res, user, url) {
     } else {
       buttons = '<span class="badge badge-muted">Объект уже изменён — проверьте журнал</span>';
     }
-    const title = post?.title || (deal ? 'Спор по сделке' : 'Объект не найден');
-    const body = post?.description || deal?.dispute_reason || item.reason || 'Нет подробностей';
-    return '<article class="card"><div class="row-between"><div><span class="badge badge-accent">' + esc(item.kind) + '</span> <span class="badge badge-muted">' + esc(post?.moderation_level || 'ручная проверка') + '</span></div><span class="muted small">' + esc(item.created_at || '') + '</span></div>' +
+    const title = post?.title || listing?.title || (deal ? 'Спор по сделке' : 'Объект не найден');
+    const body = post?.description || listing?.description || deal?.dispute_reason || item.reason || 'Нет подробностей';
+    return '<article class="card"><div class="row-between"><div><span class="badge badge-accent">' + esc(item.kind) + '</span> <span class="badge badge-muted">' + esc(post?.moderation_level || listing?.moderation_level || 'ручная проверка') + '</span></div><span class="muted small">' + esc(item.created_at || '') + '</span></div>' +
       '<h2 class="mt-1">' + esc(title) + '</h2>' +
       (author ? '<p class="muted small">Автор: ' + esc(author.full_name) + '</p>' : '') +
       (deal ? '<p class="muted small">Заказчик: ' + esc(buyer?.full_name || '—') + ' · Исполнитель: ' + esc(seller?.full_name || '—') + ' · Цена: ' + Number(deal.price || 0).toLocaleString('ru-RU') + ' ScRl · Escrow: ' + balance(deal.buyer_id, 'held').toLocaleString('ru-RU') + ' ScRl</p>' : '') +
       '<p class="mt-1">' + esc(body) + '</p><p class="muted small mt-1">Основание: ' + esc(item.reason || 'Ручная проверка') + '</p>' +
-      (post?.moderation_findings?.length ? '<p class="small">Совпадения: ' + esc(post.moderation_findings.map(x => x.label).join('; ')) + '</p>' : '') +
+      (Array.isArray(post?.moderation_findings || listing?.moderation_findings) && (post?.moderation_findings || listing?.moderation_findings).length ? '<p class="small">Совпадения: ' + esc((post?.moderation_findings || listing?.moderation_findings).map(x => x.label).join('; ')) + '</p>' : '') +
       (item.recommendation ? '<p class="small muted">' + esc(item.recommendation) + '</p>' : '') +
       '<div class="row mt-2">' + buttons + '</div></article>';
   }).join('');
@@ -85,8 +87,9 @@ function pageModeration(res, user, url) {
       '<p class="small">Причина: ' + esc(report.reason || 'Не указана') + '</p><div class="row mt-2">' + buttons + '</div></article>';
   }).join('');
 
-  const high = state.demand_posts.concat(state.offer_posts).filter(p => p.status === 'pending' && p.moderation_level === 'high').length;
-  const medium = state.demand_posts.concat(state.offer_posts).filter(p => p.status === 'pending' && p.moderation_level === 'medium').length;
+  const allListings = state.demand_posts.concat(state.offer_posts, state.listings);
+  const high = allListings.filter(p => p.status === 'pending' && p.moderation_level === 'high').length;
+  const medium = allListings.filter(p => p.status === 'pending' && p.moderation_level === 'medium').length;
   const metrics = '<div class="grid grid-4"><div class="card"><span class="muted small">Проверки</span><h2>' + cases.length + '</h2></div><div class="card"><span class="muted small">Жалобы</span><h2>' + reports.length + '</h2></div><div class="card"><span class="muted small">Высокий риск</span><h2>' + high + '</h2></div><div class="card"><span class="muted small">Средний риск</span><h2>' + medium + '</h2></div></div>';
   const search = '<form class="card grid grid-2" method="GET" action="/admin/moderation"><div><label for="moderation-query">Поиск</label><input id="moderation-query" name="q" value="' + esc(query) + '" maxlength="100" placeholder="Название, описание, причина"></div><div class="row" style="align-self:end"><button class="btn btn-primary">Найти</button><a class="btn btn-ghost" href="/admin/moderation">Сбросить</a></div></form>';
   sendHtml(res, layout('Модерация', user, flashBox(url) +
@@ -105,19 +108,23 @@ function handleModerationAction(res, user, params) {
   const now = new Date().toISOString();
   const messages = [];
 
-  if (item.kind === 'post') {
+  if (item.kind === 'post' || item.kind === 'listing') {
     if (!['approve', 'reject'].includes(decision)) return redirect(res, '/admin/moderation?error=decision');
-    const post = findPost(item.post_kind, item.target_id);
-    if (post) {
-      post.status = decision === 'approve' ? 'active' : 'rejected';
-      post.moderated_by = user.id;
-      post.moderated_at = now;
-      post.moderation_decision = decision;
-      messages.push({ id: post.user_id, title: decision === 'approve' ? 'Публикация одобрена' : 'Публикация отклонена',
+    const post = item.kind === 'post' ? findPost(item.post_kind, item.target_id) : null;
+    const listing = item.kind === 'listing' ? state.listings.find(x => x.id === item.target_id) : null;
+    const target = post || listing;
+    const canModerate = target && target.status === 'pending';
+    if (canModerate) {
+      target.status = decision === 'approve' ? 'active' : 'rejected';
+      target.moderated_by = user.id;
+      target.moderated_at = now;
+      target.moderation_decision = decision;
+      messages.push({ id: post ? post.user_id : listing.seller_id,
+        title: decision === 'approve' ? 'Публикация одобрена' : 'Публикация отклонена',
         body: decision === 'approve' ? 'Публикация прошла ручную проверку.' : 'Публикация не прошла ручную проверку. При необходимости обратитесь к администрации.',
-        href: item.post_kind === 'offer' ? '/offers' : '/demand' });
+        href: item.kind === 'listing' ? '/market' : item.post_kind === 'offer' ? '/offers' : '/demand' });
     }
-    item.decision = post ? decision : 'target_missing';
+    item.decision = canModerate ? decision : 'target_missing_or_changed';
   } else if (item.kind === 'deal') {
     const deal = state.deals.find(entry => entry.id === item.target_id);
     if (!deal || deal.status !== 'disputed') return redirect(res, '/admin/moderation?error=deal_state');
@@ -232,7 +239,7 @@ function handleReportAction(res, user, params) {
 
 function answerAdminQuestion(question) {
   const q = String(question || '').toLowerCase();
-  const posts = state.demand_posts.concat(state.offer_posts);
+  const posts = state.demand_posts.concat(state.offer_posts, state.listings);
   const pending = state.moderation_cases.filter(x => x.status === 'open').length;
   const reports = state.reports.filter(x => x.status === 'open').length;
   const disputes = state.deals.filter(x => x.status === 'disputed').length;
