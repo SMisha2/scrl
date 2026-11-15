@@ -19,7 +19,11 @@ function exchangeEscrow(orderId, sellerId) {
 function pageExchange(res, user, url) {
   if (user.role !== 'student') return redirect(res, user.role === 'admin' ? '/admin' : '/teacher');
   const tradeable = canTrade(user);
-  const offers = state.exchange_orders.filter(e => e.status === 'active').sort((a, b) => a.price_per_unit - b.price_per_unit);
+  const offers = state.exchange_orders.filter(order => {
+    if (order.status !== 'active') return false;
+    const seller = state.users.find(person => person.id === order.seller_id);
+    return Boolean(seller && !seller.is_blocked && canTrade(seller));
+  }).sort((a, b) => a.price_per_unit - b.price_per_unit);
   const myOrders = state.exchange_orders.filter(e => e.seller_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 20);
   const rows = offers.map(o => {
     const seller = state.users.find(u => u.id === o.seller_id);
@@ -124,7 +128,7 @@ function handleExchangeBuy(res, user, params) {
   const amount = Number(order.amount);
   const price = Number(order.price_per_unit);
   const cost = Math.round(amount * price);
-  if (!seller || !canTrade(seller)) return redirect(res, '/exchange?error=age');
+  if (!seller || seller.is_blocked || !canTrade(seller)) return redirect(res, '/exchange?error=age');
   if (!Number.isSafeInteger(amount) || amount < 1 || !Number.isFinite(price) || price <= 0 ||
       !Number.isSafeInteger(cost) || cost < 1) return redirect(res, '/exchange?error=order');
   if (balance(user.id, 'vrub') < cost) return redirect(res, '/exchange?error=novrub');
