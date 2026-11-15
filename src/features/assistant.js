@@ -5,8 +5,8 @@ const { layout } = require('../views/layout');
 
 function economySnapshot() {
   const users=state.users.filter(x=>x.role==='student').length;
-  const activeDemands=state.demands.filter(x=>x.status==='active').length;
-  const activeOffers=state.offers.filter(x=>x.status==='active').length;
+  const activeDemands=state.demand_posts.filter(x=>x.status==='active').length;
+  const activeOffers=state.offer_posts.filter(x=>x.status==='active').length;
   const pendingApplications=state.applications.filter(x=>x.status==='pending').length;
   const activeDeals=state.deals.filter(x=>['in_progress','waiting_confirmation','disputed'].includes(x.status)).length;
   const openReports=state.reports.filter(x=>x.status==='open').length;
@@ -33,7 +33,7 @@ function answerAdminQuestion(question) {
   const q=String(question||'').toLowerCase();
   const s=economySnapshot();
   if(q.includes('объяв')||q.includes('модерац')||q.includes('опасн')){
-    const flagged=state.demands.concat(state.offers).filter(p=>p.status==='active').map(p=>({p,a:localModerationAnalysis(p.title+' '+p.description)})).filter(x=>x.a.risk==='high').slice(0,10);
+    const flagged=state.demand_posts.concat(state.offer_posts).filter(p=>p.status==='active').map(p=>({p,a:localModerationAnalysis(p.title+' '+p.description)})).filter(x=>x.a.risk==='high').slice(0,10);
     return 'Проверка публикаций по локальным правилам:\nАктивных запросов: '+s.activeDemands+'\nАктивных предложений: '+s.activeOffers+'\nПубликаций с совпадениями: '+flagged.length+'\n'+(flagged.length?flagged.map(x=>'• «'+x.p.title+'» — '+x.a.findings.join(', ')).join('\n'):'Совпадений не найдено.')+'\n\nЭто предварительные сигналы. Решение принимает администратор.';
   }
   if(q.includes('жалоб')||q.includes('спор')){
@@ -75,7 +75,7 @@ function pageModeration(res,user) {
   const cards=reports.map(r=>{
     let target='Объект';
     if(r.target_type==='post'){
-      const p=(r.post_type==='demand'?state.demands:state.offers).find(x=>x.id===r.target_id);
+      const p=(r.post_type==='demand'?state.demand_posts:state.offer_posts).find(x=>x.id===r.target_id);
       if(p) target='Публикация: '+p.title+' — '+p.description;
     } else {
       const d=state.deals.find(x=>x.id===r.target_id);
@@ -84,7 +84,7 @@ function pageModeration(res,user) {
     const author=state.users.find(x=>x.id===r.reporter_id);
     return '<div class="card"><div class="row-between"><b>'+esc(r.target_type)+'</b><span class="badge badge-warning">Открыта</span></div><p class="mt-1">'+esc(target)+'</p><p class="muted small">Жалоба от '+esc(author?author.full_name:'участника')+': '+esc(r.reason)+'</p><div class="row mt-1"><form method="POST" action="/admin/moderation/action"><input type="hidden" name="report_id" value="'+r.id+'"><input type="hidden" name="decision" value="dismiss"><button class="btn btn-ghost btn-sm">Отклонить жалобу</button></form><form method="POST" action="/admin/moderation/action"><input type="hidden" name="report_id" value="'+r.id+'"><input type="hidden" name="decision" value="remove"><button class="btn btn-danger btn-sm">Снять публикацию / закрыть спор</button></form></div></div>';
   }).join('');
-  const flagged=state.demands.concat(state.offers).filter(p=>p.status==='active').map(p=>({p,a:localModerationAnalysis(p.title+' '+p.description)})).filter(x=>x.a.risk==='high');
+  const flagged=state.demand_posts.concat(state.offer_posts).filter(p=>p.status==='active').map(p=>({p,a:localModerationAnalysis(p.title+' '+p.description)})).filter(x=>x.a.risk==='high');
   const flaggedHtml=flagged.map(x=>'<div class="card"><b>'+esc(x.p.title)+'</b><p class="muted small">'+esc(x.a.findings.join(', '))+' — требуется ручная проверка.</p></div>').join('');
   sendHtml(res,layout('Модерация',user,'<h1>Модерация</h1><p class="muted">Сигналы риска не приводят к автоматическим блокировкам или списаниям.</p><h2 class="mt-2">Открытые жалобы и споры</h2>'+(cards||'<p class="muted">Открытых жалоб нет.</p>')+'<h2 class="mt-2">Публикации для дополнительной проверки</h2>'+(flaggedHtml||'<p class="muted">Локальные правила не обнаружили совпадений.</p>')));
 }
@@ -95,7 +95,7 @@ function handleModerationAction(res,user,params) {
   if(!report) return redirect(res,'/admin/moderation');
   const decision=params.get('decision');
   if(decision==='remove'&&report.target_type==='post'){
-    const post=(report.post_type==='demand'?state.demands:state.offers).find(x=>x.id===report.target_id);
+    const post=(report.post_type==='demand'?state.demand_posts:state.offer_posts).find(x=>x.id===report.target_id);
     if(post) post.status='removed';
   }
   if(decision==='remove'&&report.target_type==='deal'){
