@@ -119,12 +119,25 @@ function pageModeration(res, user, url) {
   const medium = allListings.filter(p => p.status === 'pending' && p.moderation_level === 'medium').length;
   const metrics = '<div class="grid grid-4"><div class="card"><span class="muted small">Проверки</span><h2>' + cases.length + '</h2></div><div class="card"><span class="muted small">Жалобы</span><h2>' + reports.length + '</h2></div><div class="card"><span class="muted small">Высокий риск</span><h2>' + high + '</h2></div><div class="card"><span class="muted small">Средний риск</span><h2>' + medium + '</h2></div></div>';
   const search = '<form class="card grid grid-2" method="GET" action="/admin/moderation"><div><label for="moderation-query">Поиск</label><input id="moderation-query" name="q" value="' + esc(query) + '" maxlength="100" placeholder="Название, описание, причина"></div><div class="row" style="align-self:end"><button class="btn btn-primary">Найти</button><a class="btn btn-ghost" href="/admin/moderation">Сбросить</a></div></form>';
+  const auditRows = state.admin_audit_logs.slice().sort((a, b) =>
+    String(b.created_at || '').localeCompare(String(a.created_at || ''))
+  ).slice(0, 20).map(entry => {
+    const actor = state.users.find(person => person.id === entry.actor_id);
+    return '<tr><td class="muted small">' + esc(entry.created_at || '—') + '</td>' +
+      '<td>' + esc(actor?.full_name || 'Система') + '</td>' +
+      '<td>' + esc(entry.action || '—') + '</td>' +
+      '<td class="small">' + esc(entry.target_id || '—') + '</td>' +
+      '<td class="small">' + esc(entry.reason || '—') + '</td></tr>';
+  }).join('');
   sendHtml(res, layout('Модерация', user, flashBox(url) +
     '<div class="row-between"><div><h1>Центр модерации</h1><p class="muted">Автофильтр — это сигнал, а не доказательство нарушения. Решения остаются за администратором.</p></div><a class="btn btn-primary" href="/admin/ai">Помощник</a></div>' +
     metrics + search + '<h2 class="mt-2">Проверки и споры (' + cases.length + ')</h2>' +
     (caseHtml || '<div class="card"><p class="muted">Открытых проверок нет.</p></div>') +
     '<h2 class="mt-2">Жалобы пользователей (' + reports.length + ')</h2>' +
-    (reportHtml || '<div class="card"><p class="muted">Открытых жалоб нет.</p></div>')));
+    (reportHtml || '<div class="card"><p class="muted">Открытых жалоб нет.</p></div>') +
+    '<h2 class="mt-2">Журнал действий модераторов</h2>' +
+    (auditRows ? '<div class="card" style="overflow-x:auto"><table><thead><tr><th>Дата</th><th>Администратор</th><th>Действие</th><th>Объект</th><th>Причина</th></tr></thead><tbody>' + auditRows + '</tbody></table></div>' :
+      '<div class="card"><p class="muted">Действий пока нет.</p></div>')));
 }
 
 function handleModerationAction(res, user, params) {
