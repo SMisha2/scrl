@@ -199,7 +199,7 @@ function pageOrders(res, user, url) {
   const buyer = state.orders.filter(order => order.buyer_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const seller = state.orders.filter(order => order.seller_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   sendHtml(res, layout('Заказы', user, flashBox(url) +
-    '<h1>Мои заказы</h1><h2>Я покупаю</h2>' +
+    '<div class="row-between"><h1>Мои заказы</h1><a class="btn btn-ghost btn-sm" href="/market">Каталог услуг</a></div><h2>Я покупаю</h2>' +
     (buyer.length ? buyer.map(order => cardFor(order, 'buyer')).join('') : '<p class="muted small">Нет покупок</p>') +
     '<h2 class="mt-2">Я продаю</h2>' +
     (seller.length ? seller.map(order => cardFor(order, 'seller')).join('') : '<p class="muted small">Нет заказов</p>')));
