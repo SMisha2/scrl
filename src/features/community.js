@@ -150,21 +150,49 @@ function pageCommunity(res, user, url) {
 
   const priceOptions = Object.keys(PRICE_MODES).map(key => '<option value="' + key + '">' + PRICE_MODES[key] + '</option>').join('');
   const form = '<section class="card"><div class="row-between"><div><h2>Новая публикация</h2><p class="muted small">Опишите, что вам нужно или чем вы можете помочь.</p></div><span class="badge badge-primary-soft">Бесплатно или за ScRl</span></div>' +
-    '<form method="POST" action="/board/create" class="mt-1"><input type="hidden" name="return_to" value="board">' +
+    '<form id="board-create-form" method="POST" action="/board/create" class="mt-1"><input type="hidden" name="return_to" value="board">' +
     '<div class="grid grid-2"><div><label>Тип публикации</label><select name="post_kind"><option value="demand">Мне нужна помощь</option><option value="offer">Я могу помочь</option></select></div>' +
     '<div><label>Категория</label><input name="category" maxlength="40" required list="board-categories" placeholder="Например, программирование"><datalist id="board-categories">' + categories.map(value => '<option value="' + esc(value) + '">').join('') + '<option value="Учёба"><option value="Дизайн"><option value="Разработка"><option value="Творчество"><option value="Помощь"></datalist></div></div>' +
     '<label>Название</label><input name="title" maxlength="100" required placeholder="Кратко сформулируйте запрос или предложение">' +
     '<label>Описание</label><textarea name="description" rows="3" maxlength="1500" required placeholder="Добавьте подробности"></textarea>' +
-    '<div class="grid grid-2"><div><label>Условия</label><select name="price_mode">' + priceOptions + '</select></div><div><label>Цена / от, ScRl</label><input name="price" type="number" min="0" value="0"></div></div>' +
-    '<div class="grid grid-2"><div><label>До, ScRl (для диапазона)</label><input name="price_max" type="number" min="0" value="0"></div><div><label>Желаемый срок</label><input name="deadline" type="date"></div></div>' +
+    '<div class="grid grid-2"><div><label>Условия</label><select name="price_mode">' + priceOptions + '</select></div><div data-price-wrap><label data-price-label>Цена, ScRl</label><input name="price" type="number" min="1" max="1000000" value="0" disabled></div></div>' +
+    '<div class="grid grid-2"><div data-price-max-wrap hidden><label>До, ScRl</label><input name="price_max" type="number" min="1" max="1000000" value="0" disabled></div><div><label>Желаемый срок</label><input name="deadline" type="date"></div></div>' +
     '<button class="btn btn-primary" type="submit">Опубликовать</button></form></section>';
   const filters = '<section class="card"><form method="GET" action="/board"><div class="grid grid-3">' +
     '<div><label>Поиск</label><input name="q" value="' + esc(q) + '" placeholder="Название или описание"></div>' +
     '<div><label>Показывать</label><select name="kind"><option value="all"' + (kindFilter === 'all' ? ' selected' : '') + '>Всё вместе</option><option value="demand"' + (kindFilter === 'demand' ? ' selected' : '') + '>Мне нужно</option><option value="offer"' + (kindFilter === 'offer' ? ' selected' : '') + '>Я могу</option></select></div>' +
     '<div><label>Категория</label><select name="category"><option value="">Все категории</option>' + categories.map(value => '<option value="' + esc(value) + '"' + (category === value ? ' selected' : '') + '>' + esc(value) + '</option>').join('') + '</select></div></div><button class="btn btn-ghost btn-sm mt-1" type="submit">Применить</button> <a class="btn btn-ghost btn-sm" href="/board">Сбросить</a></form></section>';
+  const priceModeScript = `<script>
+  (function(){
+    const form=document.getElementById('board-create-form');
+    if(!form) return;
+    const mode=form.elements.price_mode, price=form.elements.price, max=form.elements.price_max;
+    const priceWrap=form.querySelector('[data-price-wrap]');
+    const maxWrap=form.querySelector('[data-price-max-wrap]');
+    const label=form.querySelector('[data-price-label]');
+    function update(){
+      const fixed=mode.value==='fixed', range=mode.value==='range';
+      priceWrap.hidden=!(fixed||range);
+      maxWrap.hidden=!range;
+      price.disabled=!(fixed||range);
+      max.disabled=!range;
+      price.required=fixed||range;
+      max.required=range;
+      price.min=(fixed||range)?'1':'0';
+      max.min=range?'1':'0';
+      label.textContent=range?'Цена от, ScRl':'Цена, ScRl';
+      if(!fixed&&!range){price.value='0';max.value='0';}
+      else if(fixed){max.value='0';}
+      if(range){max.min=price.value||'1';}
+    }
+    mode.addEventListener('change',update);
+    price.addEventListener('input',function(){if(mode.value==='range')max.min=price.value||'1';});
+    update();
+  })();
+  </script>`;
   sendHtml(res, layout('Общая доска', user,
     flashBox(url) + '<div class="row-between"><div><h1>Общая доска</h1><p class="muted">Все запросы и предложения в одной ленте.</p></div><span class="badge badge-muted">' + posts.length + ' публикаций</span></div>' +
-    form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>')
+    form + filters + (cards || '<div class="card text-center"><h2>Публикаций пока нет</h2><p class="muted">Измените фильтры или создайте первую публикацию.</p></div>') + priceModeScript
   ));
 }
 
@@ -184,8 +212,8 @@ async function createPost(res, user, params, kind) {
   const description = (params.get('description') || '').trim().slice(0, 1500);
   const category = (params.get('category') || 'Другое').trim().slice(0, 40);
   const mode = PRICE_MODES[params.get('price_mode')] ? params.get('price_mode') : 'negotiable';
-  const price = Number(params.get('price') || 0);
-  const priceMax = Number(params.get('price_max') || 0);
+  let price = Number(params.get('price') || 0);
+  let priceMax = Number(params.get('price_max') || 0);
   const deadline = (params.get('deadline') || '').trim();
   const deadlineDate = deadline ? new Date(deadline + 'T00:00:00Z') : null;
   if (!title || !description || !category || !Number.isSafeInteger(price) || price < 0 || price > 1000000 ||
@@ -194,6 +222,8 @@ async function createPost(res, user, params, kind) {
         !Number.isFinite(deadlineDate.getTime()) || deadlineDate.toISOString().slice(0, 10) !== deadline))) {
     return redirect(res, returnPath + '?error=fields');
   }
+  if (!['fixed', 'range'].includes(mode)) { price = 0; priceMax = 0; }
+  if (mode === 'fixed') priceMax = 0;
   if (mode === 'fixed' && price < 1) return redirect(res, returnPath + '?error=fields');
   if (mode === 'range' && (price < 1 || priceMax < price || priceMax > 1000000)) return redirect(res, returnPath + '?error=fields');
   const moderation = await analyseSubmission(title + '\n' + description + '\n' + category);
@@ -670,6 +700,9 @@ function pageFavorites(res, user) {
 
 function pageNotifications(res, user, url) {
   const items = state.notifications.filter(n => n.user_id === user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  let markedRead = false;
+  for (const item of items) { if (!item.is_read) { item.is_read = true; markedRead = true; } }
+  if (markedRead) save();
   const rows = items.map(n => '<a class="card" style="display:block;color:inherit;opacity:' + (n.is_read ? '.72' : '1') + '" href="' + esc(n.href || '/') + '"><div class="row-between"><b>' + esc(n.title) + '</b><span class="muted small">' + new Date(n.created_at).toLocaleString('ru-RU') + '</span></div><p class="mt-1">' + esc(n.body) + '</p>' + (!n.is_read ? '<span class="badge badge-accent">Новое</span>' : '') + '</a>').join('');
   sendHtml(res, layout('Уведомления', user, flashBox(url) + '<div class="row-between"><h1>Уведомления</h1><form method="POST" action="/notifications/read"><button class="btn btn-ghost btn-sm">Отметить всё прочитанным</button></form></div>' + (rows || '<div class="card"><p class="muted">Уведомлений пока нет.</p></div>')));
 }
